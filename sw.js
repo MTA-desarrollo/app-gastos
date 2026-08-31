@@ -2,12 +2,12 @@
    Precarga el shell para que la app abra sin red. Los datos viven en el
    dispositivo, de modo que la app es plenamente funcional sin conexión: el
    colaborador captura en un juzgado sin señal y sincroniza después. */
-var CACHE = "mtag-v1";
+var CACHE = "mtag-v2";
 var SHELL = [
   "./", "./index.html", "./manifest.webmanifest",
-  "./iconos/icono-192.png", "./iconos/icono-512.png",
-  "./iconos/maskable-192.png", "./iconos/maskable-512.png",
-  "./iconos/apple-touch-icon.png", "./iconos/favicon-32.png"
+  "./icono-192.png", "./icono-512.png",
+  "./maskable-192.png", "./maskable-512.png",
+  "./apple-touch-icon.png", "./favicon-32.png"
 ];
 
 self.addEventListener("install", function (e) {
@@ -33,7 +33,7 @@ self.addEventListener("fetch", function (e) {
   var req = e.request;
   if (req.method !== "GET") return;
   var url = new URL(req.url);
-  if (url.origin !== location.origin) return;   /* las tipografías van por su cuenta */
+  if (url.origin !== location.origin) return;
 
   if (req.mode === "navigate") {
     e.respondWith(

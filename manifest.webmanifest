@@ -2,7 +2,7 @@
   "name": "MTA · App de Gastos",
   "short_name": "Gastos MTA",
   "description": "Captura y aprobación de gastos y reembolsos · Muñoz Tamayo & Asociados Abogados SAS",
-  "id": "/mta-app-gastos/",
+  "id": "/app-gastos/",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -14,15 +14,15 @@
   "dir": "ltr",
   "categories": ["business", "finance", "productivity"],
   "icons": [
-    { "src": "iconos/icono-192.png",    "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "iconos/icono-512.png",    "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "iconos/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "iconos/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icono-192.png",    "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icono-512.png",    "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
     { "name": "Nuevo gasto", "short_name": "Nuevo", "url": "./index.html#captura",
-      "icons": [{ "src": "iconos/icono-192.png", "sizes": "192x192" }] },
+      "icons": [{ "src": "icono-192.png", "sizes": "192x192" }] },
     { "name": "Mis gastos", "short_name": "Mis gastos", "url": "./index.html#mis",
-      "icons": [{ "src": "iconos/icono-192.png", "sizes": "192x192" }] }
+      "icons": [{ "src": "icono-192.png", "sizes": "192x192" }] }
   ]
 }
