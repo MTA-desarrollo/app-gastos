@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>MTA · App de Gastos</title>
-<meta name="theme-color" content="#A8792A">
+<meta name="theme-color" content="#0077C0">
 <meta name="color-scheme" content="light dark">
 <meta name="description" content="Captura y aprobación de gastos y reembolsos · Muñoz Tamayo &amp; Asociados Abogados SAS">
 <link rel="manifest" href="./manifest.webmanifest">
@@ -17,37 +17,42 @@
 <meta name="format-detection" content="telephone=no">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --ground:#EDF0F4; --paper:#FFF; --paper-2:#F6F8FA; --ink:#141C28; --slate:#5C6878;
-  --faint:#8A94A3; --line:#DBE1E9; --brass:#A8792A; --brass-soft:#F2E6CE;
+  --ground:#EEF2F6; --paper:#FFF; --paper-2:#F4F7FA; --ink:#1C2430; --slate:#565D68;
+  --faint:#8B939E; --line:#D8DEE6; --brass:#0077C0; --brass-soft:#E1EFFA;
   --ok:#1B6E45; --ok-bg:#DFF0E6; --warn:#8A5A00; --warn-bg:#FBEDD2;
-  --err:#9B1C2B; --err-bg:#F7DFE2; --blue:#215C8F; --blue-bg:#DDEAF5;
-  --gris:#4E5867; --gris-bg:#E5E9EF;
+  --err:#9B1C2B; --err-bg:#F7DFE2; --blue:#0077C0; --blue-bg:#E1EFFA;
+  --gris:#6D6E71; --gris-bg:#E8EAEC;
 }
 @media (prefers-color-scheme:dark){
   :root{
-    --ground:#0B1017; --paper:#151D28; --paper-2:#1B2431; --ink:#E7ECF3; --slate:#9AA6B6;
-    --faint:#6E7A8B; --line:#2A3444; --brass:#D6A24E; --brass-soft:#3A2E17;
+    --ground:#0C1117; --paper:#161C24; --paper-2:#1D242E; --ink:#E8ECF1; --slate:#98A2AE;
+    --faint:#6C7682; --line:#2A323C; --brass:#3AA0E0; --brass-soft:#10283A;
     --ok:#6DD69C; --ok-bg:#12301F; --warn:#E0B15F; --warn-bg:#33260D;
-    --err:#F09AA5; --err-bg:#3A1219; --blue:#7FB6E6; --blue-bg:#122536;
-    --gris:#A5B0BF; --gris-bg:#232C39;
+    --err:#F09AA5; --err-bg:#3A1219; --blue:#3AA0E0; --blue-bg:#10283A;
+    --gris:#A8ADB4; --gris-bg:#232B35;
   }
 }
 *{box-sizing:border-box}
+/* El atributo hidden debe ganar SIEMPRE. Sin esto, cualquier regla que fije
+   display -por ejemplo #leyendo{display:flex}- deja visible un elemento que
+   el HTML marcó como oculto. */
+[hidden]{display:none!important}
 body{margin:0;background:var(--ground);color:var(--ink);
-     font:15px/1.55 "IBM Plex Sans",system-ui,-apple-system,sans-serif;
+     font:15px/1.55 "Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
      -webkit-font-smoothing:antialiased;padding-bottom:78px}
 .wrap{max-width:760px;margin:0 auto;padding:0 14px}
-h1{font-family:Fraunces,Georgia,serif;font-size:20px;font-weight:600;margin:0}
-h2{font-family:Fraunces,Georgia,serif;font-size:17px;font-weight:600;margin:0 0 3px}
-.num,.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+h1{font-size:20px;font-weight:600;letter-spacing:-.01em;margin:0}
+h2{font-size:17px;font-weight:600;letter-spacing:-.01em;margin:0 0 3px}
+.num,.n{font-family:"Source Code Pro",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 
 header{position:sticky;top:0;z-index:30;background:var(--paper);border-bottom:1px solid var(--line)}
 .hrow{display:flex;align-items:center;gap:10px;padding:11px 0}
-.logo{width:30px;height:30px;border-radius:8px;background:var(--brass);color:#fff;
-      display:grid;place-items:center;font-family:Fraunces,serif;font-weight:600;font-size:14px;flex:none}
+.logo{display:flex;align-items:center;gap:7px;flex:none;padding-left:3px}
+.logo::before{content:"";width:4px;height:26px;background:var(--brass);border-radius:2px}
+.logo{font-weight:700;font-size:17px;letter-spacing:.06em;color:var(--gris)}
 .hsub{font-size:11px;color:var(--faint);margin-top:-2px}
 .hsp{flex:1}
 select,input,textarea{font:inherit;color:inherit;background:var(--paper-2);
@@ -58,14 +63,14 @@ input:disabled{opacity:.5}
 
 .pane{padding:16px 0 8px}
 .card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:15px;margin-bottom:13px}
-.tit{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);
+.tit{font-size:11.5px;letter-spacing:.01em;color:var(--slate);
      font-weight:600;margin:0 0 9px}
 
 .dos{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .tres{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
 label.f{display:block;margin-bottom:9px}
 label.f > span{display:block;font-size:11.5px;color:var(--slate);margin-bottom:4px;font-weight:500}
-.auto{background:var(--brass-soft)!important;border-color:var(--brass)!important}
+.auto{background:var(--brass-soft)!important;border-color:var(--brass)!important;color:var(--ink)}
 .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate)}
 .chk input{width:auto}
 .hint{font-size:11.5px;color:var(--faint);margin:-4px 0 9px}
@@ -120,23 +125,23 @@ label.f > span{display:block;font-size:11.5px;color:var(--slate);margin-bottom:4
 .resumen{display:flex;justify-content:space-between;align-items:baseline;
          background:var(--paper);border:1px solid var(--line);border-radius:12px;
          padding:11px 15px;margin-bottom:11px}
-.resumen b{font-family:"IBM Plex Mono",monospace;font-size:17px;font-variant-numeric:tabular-nums}
+.resumen b{font-family:"Source Code Pro",ui-monospace,monospace;font-size:17px;font-variant-numeric:tabular-nums}
 .fila{background:var(--paper);border:1px solid var(--line);border-left:3px solid var(--line);
       border-radius:11px;padding:11px 13px;margin-bottom:8px}
 .fila.e-bor{border-left-color:var(--gris)} .fila.e-apr{border-left-color:var(--warn)}
 .fila.e-ok{border-left-color:var(--ok)} .fila.e-rec{border-left-color:var(--err)}
 .fila.e-ree,.fila.e-con{border-left-color:var(--blue)}
-.f1{display:flex;align-items:center;font-family:"IBM Plex Mono",monospace;font-size:13px}
+.f1{display:flex;align-items:center;font-family:"Source Code Pro",ui-monospace,monospace;font-size:13px}
 .f2{display:flex;gap:11px;font-size:11.5px;color:var(--faint);margin:3px 0;
-    font-family:"IBM Plex Mono",monospace}
+    font-family:"Source Code Pro",ui-monospace,monospace}
 .f3{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px}
-.f3 b{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+.f3 b{font-family:"Source Code Pro",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 .motivo{margin-top:7px;background:var(--err-bg);color:var(--err);border-radius:7px;
         padding:6px 9px;font-size:11.5px}
 
 .tarjeta{background:var(--paper);border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:11px}
 .th{display:flex;justify-content:space-between;align-items:baseline;
-    font-family:"IBM Plex Mono",monospace;font-size:14px;font-weight:600}
+    font-family:"Source Code Pro",ui-monospace,monospace;font-size:14px;font-weight:600}
 .tsub{font-size:12px;color:var(--slate);margin:2px 0 10px}
 .dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:0 0 9px;font-size:12.5px}
 .dl dt{color:var(--faint);font-size:11px}
@@ -158,16 +163,16 @@ label.f > span{display:block;font-size:11.5px;color:var(--slate);margin-bottom:4
 .sel{display:flex;align-items:center;gap:9px;padding:7px 2px;font-size:12.5px;cursor:pointer}
 .sel input{width:auto;flex:none}
 .sel span{flex:1}
-.sel b{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+.sel b{font-family:"Source Code Pro",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 .barra{position:sticky;bottom:64px;background:var(--paper);border:1px solid var(--line);
        border-radius:12px;padding:11px 14px;display:flex;align-items:center;gap:12px;
        box-shadow:0 -3px 16px rgba(0,0,0,.07);margin-top:11px}
 .barra .t{flex:1;font-size:12.5px;color:var(--slate)}
-.barra b{font-family:"IBM Plex Mono",monospace}
+.barra b{font-family:"Source Code Pro",ui-monospace,monospace}
 
 .tabla{border-top:1px solid var(--line);margin:8px 0}
 .tr{display:grid;grid-template-columns:1fr auto auto auto;gap:9px;padding:6px 0;
-    border-bottom:1px solid var(--line);font-size:12px;font-family:"IBM Plex Mono",monospace}
+    border-bottom:1px solid var(--line);font-size:12px;font-family:"Source Code Pro",ui-monospace,monospace}
 .sello{margin-top:11px;border:1.4px solid var(--brass);border-radius:10px;padding:11px 13px;
        background:var(--brass-soft);font-size:11.5px;line-height:1.6}
 .sello b{color:var(--brass);letter-spacing:.07em;font-size:10px}
@@ -175,9 +180,9 @@ label.f > span{display:block;font-size:11.5px;color:var(--slate);margin-bottom:4
 .ev{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;background:var(--paper);
     border:1px solid var(--line);border-radius:9px;padding:8px 11px;margin-bottom:6px;font-size:11.5px}
 .ev .ec{background:var(--paper-2);border-radius:5px;padding:2px 7px;font-weight:600;font-size:10.5px}
-.ev b{font-family:"IBM Plex Mono",monospace}
+.ev b{font-family:"Source Code Pro",ui-monospace,monospace}
 .ev span{color:var(--faint)}
-.ev .eo{margin-left:auto;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.ev .eo{margin-left:auto;font-size:10.5px;letter-spacing:.01em}
 .ev .ed{flex-basis:100%;color:var(--slate)}
 
 nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);border-top:1px solid var(--line);
@@ -198,23 +203,23 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);border-top:1p
 .toast.warn{background:var(--warn);color:#fff}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:13px}
 .kpi{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:11px 13px}
-.kpi span{display:block;font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
-.kpi b{display:block;font-family:"IBM Plex Mono",monospace;font-size:21px;line-height:1.25}
-.kpi i{font-style:normal;font-size:12px;color:var(--slate);font-family:"IBM Plex Mono",monospace}
+.kpi span{display:block;font-size:11px;color:var(--faint);letter-spacing:.01em}
+.kpi b{display:block;font-family:"Source Code Pro",ui-monospace,monospace;font-size:21px;line-height:1.25}
+.kpi i{font-style:normal;font-size:12px;color:var(--slate);font-family:"Source Code Pro",ui-monospace,monospace}
 .btns3{display:grid;grid-template-columns:1fr;gap:8px}
 @media(min-width:460px){.btns3{grid-template-columns:1.3fr 1fr 1fr}}
 .rc{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:baseline;
     padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px}
-.rc b:first-child{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--brass)}
+.rc b:first-child{font-family:"Source Code Pro",ui-monospace,monospace;font-size:11.5px;color:var(--brass)}
 .rc span{color:var(--slate);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rc i{font-style:normal;font-size:11px;color:var(--faint)}
-.rc b:last-child{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+.rc b:last-child{font-family:"Source Code Pro",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 .tab{font-size:9px}
 .instalar{position:sticky;top:53px;z-index:29;background:var(--brass-soft);
           border-bottom:1px solid var(--brass)}
 .ibar{display:flex;align-items:center;gap:11px;padding:10px 14px}
-.iico{width:34px;height:34px;border-radius:9px;background:var(--brass);color:#fff;flex:none;
-      display:grid;place-items:center;font-family:Fraunces,serif;font-weight:600;font-size:16px}
+.iico{padding:5px 9px;border-radius:8px;background:var(--brass);color:#fff;flex:none;
+      font-weight:600;font-size:13px;letter-spacing:.04em}
 .itxt{flex:1;min-width:0;font-size:11.5px;color:var(--brass);line-height:1.4}
 .itxt b{display:block;font-size:13px}
 .itxt span{display:block}
@@ -229,8 +234,8 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);border-top:1p
 
 <header>
  <div class="wrap hrow">
-   <div class="logo">M</div>
-   <div><h1>App de Gastos</h1><div class="hsub">Muñoz Tamayo &amp; Asociados</div></div>
+   <div class="logo">MTA</div>
+   <div><h1>App de Gastos</h1><div class="hsub">Reembolsos a colaboradores</div></div>
    <div class="hsp"></div>
    <select id="usuario" title="Usuario de prueba"></select>
  </div>
@@ -238,7 +243,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);border-top:1p
 
 <div class="instalar" id="instalar" hidden>
   <div class="wrap ibar">
-    <div class="iico">M</div>
+    <div class="iico">MTA</div>
     <div class="itxt">
       <b>Instale la app en su celular</b>
       <span id="guiaIOS" hidden>Toque <b>Compartir</b> y luego <b>Agregar a pantalla de inicio</b>.</span>
@@ -1001,23 +1006,23 @@ var ESTILOS =
   '<numFmt numFmtId="165" formatCode="dd/mm/yyyy"/>' +
 '</numFmts>' +
 '<fonts count="6">' +
-  '<font><sz val="10"/><name val="Calibri"/></font>' +
-  '<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>' +
-  '<font><b/><sz val="10"/><name val="Calibri"/></font>' +
+  '<font><sz val="10"/><name val="Aptos Narrow"/></font>' +
+  '<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Aptos Narrow"/></font>' +
+  '<font><b/><sz val="10"/><name val="Aptos Narrow"/></font>' +
   '<font><sz val="9"/><name val="Consolas"/></font>' +
-  '<font><b/><sz val="14"/><color rgb="FF1F3864"/><name val="Calibri"/></font>' +
-  '<font><sz val="9"/><color rgb="FF5C6878"/><name val="Calibri"/></font>' +
+  '<font><b/><sz val="14"/><color rgb="FF00548A"/><name val="Aptos Narrow"/></font>' +
+  '<font><sz val="9"/><color rgb="FF565D68"/><name val="Aptos Narrow"/></font>' +
 '</fonts>' +
 '<fills count="4">' +
   '<fill><patternFill patternType="none"/></fill>' +
   '<fill><patternFill patternType="gray125"/></fill>' +
-  '<fill><patternFill patternType="solid"><fgColor rgb="FF1F3864"/><bgColor indexed="64"/></patternFill></fill>' +
-  '<fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FF0077C0"/><bgColor indexed="64"/></patternFill></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FFEDF2F7"/><bgColor indexed="64"/></patternFill></fill>' +
 '</fills>' +
 '<borders count="2">' +
   '<border><left/><right/><top/><bottom/><diagonal/></border>' +
-  '<border><left style="thin"><color rgb="FFD0D0D0"/></left><right style="thin"><color rgb="FFD0D0D0"/></right>' +
-  '<top style="thin"><color rgb="FFD0D0D0"/></top><bottom style="thin"><color rgb="FFD0D0D0"/></bottom><diagonal/></border>' +
+  '<border><left style="thin"><color rgb="FFD8DEE6"/></left><right style="thin"><color rgb="FFD8DEE6"/></right>' +
+  '<top style="thin"><color rgb="FFD8DEE6"/></top><bottom style="thin"><color rgb="FFD8DEE6"/></bottom><diagonal/></border>' +
 '</borders>' +
 '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
 '<cellXfs count="9">' +
@@ -1753,7 +1758,7 @@ function pintarFinal() {
 }
 
 function sello(r, gs) {
-  return '<div class="sello"><b>SELLO DE AUDITORÍA</b>' +
+  return '<div class="sello"><b>Sello de auditoría</b>' +
     "<div>Aprobado por " + esc(r.AprobadorFinal) + " el " + M.fechaCorta(r.FechaAprobacionFinal) +
     "<br>Identificador de aprobación " + esc(r.IdAprobacionFinal) +
     "<br>Código de verificación <b>" + esc(r.CodigoVerificacion) + "</b></div></div>";
@@ -1770,17 +1775,17 @@ function comprobante(r, gs) {
   }).join("");
   w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8">' +
     "<title>" + esc(r.Title) + "</title><style>" +
-    "body{font:12px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#141C28;max-width:900px;margin:32px auto;padding:0 24px}" +
+    "body{font:12px/1.5 'Source Sans 3',system-ui,'Segoe UI',sans-serif;color:#1C2430;max-width:900px;margin:32px auto;padding:0 24px}" +
     "h1{font-size:19px;margin:0 0 2px}.sub{color:#5C6878;margin:0 0 22px}" +
     "table{width:100%;border-collapse:collapse;margin:16px 0}" +
-    "th,td{border-bottom:1px solid #DBE1E9;padding:7px 8px;text-align:left;font-size:11px}" +
-    "th{background:#F6F8FA;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:#5C6878}" +
+    "th,td{border-bottom:1px solid #D8DEE6;padding:7px 8px;text-align:left;font-size:11px}" +
+    "th{background:#F4F7FA;font-size:10.5px;letter-spacing:.01em;color:#565D68;font-weight:600}" +
     ".n{text-align:right;font-variant-numeric:tabular-nums}" +
-    ".cab{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;background:#F6F8FA;padding:14px 16px;border-radius:8px}" +
-    ".cab div{display:flex;justify-content:space-between;border-bottom:1px solid #E7EBF0;padding:3px 0}" +
+    ".cab{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;background:#F4F7FA;padding:14px 16px;border-radius:8px}" +
+    ".cab div{display:flex;justify-content:space-between;border-bottom:1px solid #E4E9EF;padding:3px 0}" +
     ".cab b{font-variant-numeric:tabular-nums}" +
-    ".sello{margin-top:22px;border:1.5px solid #A8792A;border-radius:8px;padding:14px 16px;background:#FDF8EF}" +
-    ".sello b{color:#8A5A00;letter-spacing:.06em;font-size:10px}" +
+    ".sello{margin-top:22px;border:1.5px solid #0077C0;border-radius:8px;padding:14px 16px;background:#EFF7FD}" +
+    ".sello b{color:#005C96;letter-spacing:.04em;font-size:10.5px;font-weight:700}" +
     ".mar{margin-top:14px;background:#FBEDD2;border-radius:8px;padding:10px 14px;font-size:11px}" +
     "@media print{body{margin:0}}</style></head><body>" +
     "<h1>Comprobante de reembolso " + esc(r.Title) + "</h1>" +
@@ -1799,7 +1804,7 @@ function comprobante(r, gs) {
     filas + "</tbody></table>" +
     (r.MarcasAtencion ? '<div class="mar"><b>Marcas de atención</b><br>' +
       esc(r.MarcasAtencion).replace(/\n/g, "<br>") + "</div>" : "") +
-    '<div class="sello"><b>SELLO DE AUDITORÍA</b><br>' +
+    '<div class="sello"><b>Sello de auditoría</b><br>' +
     "Aprobado electrónicamente por <b>" + esc(r.AprobadorFinal) + "</b> el " +
     M.fechaCorta(r.FechaAprobacionFinal) + ".<br>" +
     "Identificador de aprobación: " + esc(r.IdAprobacionFinal) + "<br>" +

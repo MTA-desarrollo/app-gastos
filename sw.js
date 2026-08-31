@@ -2,7 +2,7 @@
    Precarga el shell para que la app abra sin red. Los datos viven en el
    dispositivo, de modo que la app es plenamente funcional sin conexión: el
    colaborador captura en un juzgado sin señal y sincroniza después. */
-var CACHE = "mtag-v2";
+var CACHE = "mtag-v3";
 var SHELL = [
   "./", "./index.html", "./manifest.webmanifest",
   "./icono-192.png", "./icono-512.png",
