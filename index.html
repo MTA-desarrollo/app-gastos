@@ -290,11 +290,11 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
       </div>
       <div class="drop" id="btnArchivo">
         <svg viewBox="0 0 24 24"><path d="M13 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V9z"/><path d="M13 3v6h6"/></svg>
-        <b>Adjuntar archivo</b><span>PDF o imagen</span>
+        <b>Adjuntar archivo</b><span>PDF, XML o imagen</span>
       </div>
     </div>
     <input type="file" id="inFoto" accept="image/*" capture="environment" multiple hidden>
-    <input type="file" id="inArchivo" accept="application/pdf,image/*" multiple hidden>
+    <input type="file" id="inArchivo" accept="application/pdf,image/*,.xml,text/xml" multiple hidden>
     <div id="leyendo" hidden><span class="spin"></span> Leyendo el soporte…</div>
     <div id="listaFiles"></div>
     <p class="vacio" id="sinFiles">Todo gasto exige al menos una foto o un archivo.</p>
@@ -310,7 +310,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
       <label class="f"><span>NIT o cédula</span><input id="fNit" inputmode="numeric"></label>
       <label class="f"><span>Número del documento</span><input id="fNumero"></label>
     </div>
-    <label class="f"><span>Nombre del proveedor</span><input id="fProveedor" placeholder="El QR no lo trae: se digita"></label>
+    <label class="f"><span>Nombre del proveedor</span><input id="fProveedor" placeholder="Lo diligencia la app"></label>
     <label class="f"><span>CUFE</span><input id="fCufe" placeholder="Lo diligencia la app" class="num" style="font-size:11px"></label>
     <label class="chk"><input type="checkbox" id="fSinSoporte"> Sin soporte formal</label>
   </div>
@@ -568,6 +568,7 @@ async function trozosPDF(buf){
   return trozos;
 }
 async function datosDePDF(file){
+  var textoCrudo = "";
   var buf = new Uint8Array(await file.arrayBuffer());
   var trozos = await trozosPDF(buf);
   /* 1. texto */
@@ -579,8 +580,9 @@ async function datosDePDF(file){
     var s = inf ? aTexto(inf) : aTexto(trozos[i].datos);
     if(/(BT|Tj|TJ)/.test(s)) texto += " " + cadenasPDF(s);
   }
+  textoCrudo = texto;
   var d = analizarTexto(texto);
-  if(hayDatos(d)) return {datos:d, via:"texto"};
+  if(hayDatos(d)) return {datos:d, via:"texto", texto:texto};
   /* 2. imágenes incrustadas */
   for(var k=0;k<trozos.length;k++){
     var t = trozos[k];
@@ -618,7 +620,7 @@ async function datosDePDF(file){
     }
     if(txt){
       var d2 = analizarTexto(txt);
-      if(hayDatos(d2)) return {datos:d2, via:"qr"};
+      if(hayDatos(d2)) return {datos:d2, via:"qr", texto:textoCrudo || txt};
     }
   }
   return null;
@@ -627,6 +629,14 @@ async function datosDePDF(file){
 /* ---- punto de entrada ---- */
 async function leerSoporte(file){
   try{
+    /* XML de la factura electrónica: es la fuente exacta y trae la razón social */
+    if(/\.xml$/i.test(file.name || "") || file.type === "text/xml" ||
+       file.type === "application/xml"){
+      var t = await file.text();
+      var dx = window.MTALECTOR && window.MTALECTOR.deXML(t);
+      if(dx) return {datos:dx, via:"xml"};
+      return null;
+    }
     if(file.type.indexOf("image") === 0){
       var t = await qrDesdeBlob(file);
       if(t){ var d = analizarTexto(t); if(hayDatos(d)) return {datos:d, via:"qr"}; }
@@ -639,6 +649,227 @@ async function leerSoporte(file){
   return null;
 }
 
+</script>
+<script>/* =========================================================================
+   MTA · Lector ampliado del soporte
+   =========================================================================
+   Tres capas nuevas sobre el lector de QR, en orden de certeza:
+
+     1. XML de la factura electrónica  · exacto, trae TODO, incluida la razón social
+     2. Texto del PDF                  · alto, la razón social está junto al NIT
+     3. Memoria de proveedores         · la app recuerda qué NIT es qué proveedor
+
+   Ninguna agrega un conector ni un costo. Todo ocurre en el dispositivo.
+   ========================================================================= */
+(function () {
+"use strict";
+
+/* ---------------------------------------------------------------- memoria */
+var KP = "mtag.proveedores";
+function memoria() {
+  try { return JSON.parse(localStorage.getItem(KP) || "{}"); } catch (e) { return {}; }
+}
+function recordar(nit, nombre) {
+  if (!nit || !nombre || nombre.length < 3) return;
+  var m = memoria();
+  m[String(nit).replace(/\D/g, "")] = nombre.trim();
+  try { localStorage.setItem(KP, JSON.stringify(m)); } catch (e) {}
+}
+function proveedorDe(nit) {
+  if (!nit) return "";
+  return memoria()[String(nit).replace(/\D/g, "")] || "";
+}
+
+/* ------------------------------------------------------------------- XML */
+/* La DIAN adopta UBL 2.1. El nombre del emisor vive en
+   AccountingSupplierParty > Party > PartyName > Name, y en la variante
+   PartyLegalEntity > RegistrationName. Se prueban ambas y varios alias,
+   porque los proveedores no siempre usan el mismo nodo. */
+/* El XML de la DIAN usa prefijos cbc: y cac:. getElementsByTagName exige el
+   nombre completo con prefijo; getElementsByTagNameNS con comodín lo ignora,
+   que es lo que hace falta porque no todos los proveedores usan el mismo. */
+function etiquetas(nodo, nombre) {
+  var r = nodo.getElementsByTagNameNS ? nodo.getElementsByTagNameNS("*", nombre) : [];
+  if (r.length) return r;
+  return nodo.getElementsByTagName(nombre);
+}
+
+function texto(doc, rutas) {
+  for (var i = 0; i < rutas.length; i++) {
+    var n = etiquetas(doc, rutas[i]);
+    for (var j = 0; j < n.length; j++) {
+      var v = (n[j].textContent || "").trim();
+      if (v) return v;
+    }
+  }
+  return "";
+}
+
+function dentroDe(doc, contenedor, etiqs) {
+  var c = etiquetas(doc, contenedor);
+  for (var i = 0; i < c.length; i++) {
+    for (var k = 0; k < etiqs.length; k++) {
+      var n = etiquetas(c[i], etiqs[k]);
+      for (var j = 0; j < n.length; j++) {
+        var v = (n[j].textContent || "").trim();
+        if (v) return v;
+      }
+    }
+  }
+  return "";
+}
+
+function conImpuesto(doc, codigo) {
+  var g = etiquetas(doc, "TaxSubtotal");
+  for (var i = 0; i < g.length; i++) {
+    var id = etiquetas(g[i], "ID");
+    var esc = false;
+    for (var j = 0; j < id.length; j++) {
+      if ((id[j].textContent || "").trim() === codigo) { esc = true; break; }
+    }
+    if (esc) {
+      var t = etiquetas(g[i], "TaxAmount");
+      if (t.length) return (t[0].textContent || "").trim();
+    }
+  }
+  return "";
+}
+
+function deXML(txt) {
+  var doc;
+  try {
+    doc = new DOMParser().parseFromString(txt, "application/xml");
+    if (etiquetas(doc, "parsererror").length) return null;
+  } catch (e) { return null; }
+
+  /* Un adjunto de la DIAN envuelve la factura como texto dentro de
+     <cbc:Description><![CDATA[ … ]]></cbc:Description>. Se desenvuelve. */
+  if (etiquetas(doc, "AttachedDocument").length) {
+    var d = etiquetas(doc, "Description");
+    for (var i = 0; i < d.length; i++) {
+      var interno = (d[i].textContent || "").trim();
+      if (interno.indexOf("<Invoice") >= 0 || interno.indexOf(":Invoice") >= 0) {
+        var r = deXML(interno);
+        if (r) return r;
+      }
+    }
+  }
+
+  var esFactura = etiquetas(doc, "Invoice").length ||
+                  etiquetas(doc, "CreditNote").length ||
+                  etiquetas(doc, "DebitNote").length ||
+                  etiquetas(doc, "InvoiceLine").length ||
+                  /Invoice|CreditNote/.test(doc.documentElement ? doc.documentElement.nodeName : "");
+  if (!esFactura) return null;
+
+  var emisor = dentroDe(doc, "AccountingSupplierParty",
+                        ["RegistrationName", "Name"]);
+  var nit = dentroDe(doc, "AccountingSupplierParty", ["CompanyID"]);
+  var d = {
+    numfac: texto(doc, ["ID"]),
+    fecfac: texto(doc, ["IssueDate"]),
+    nitfac: nit.replace(/\D/g, ""),
+    proveedor: emisor,
+    valfac: texto(doc, ["LineExtensionAmount", "TaxExclusiveAmount"]),
+    valiva: conImpuesto(doc, "01") || texto(doc, ["TaxAmount"]),
+    valotroim: "",
+    valtolfac: texto(doc, ["PayableAmount", "TaxInclusiveAmount"]),
+    cufe: texto(doc, ["UUID"])
+  };
+  var ic = conImpuesto(doc, "04"), inc = conImpuesto(doc, "03");
+  var otros = (parseFloat(ic) || 0) + (parseFloat(inc) || 0);
+  if (otros > 0) d.valotroim = String(otros);
+
+  if (!d.numfac && !d.valtolfac) return null;
+  if (d.nitfac && d.proveedor) recordar(d.nitfac, d.proveedor);
+  return d;
+}
+
+/* ------------------------------------------------- razón social en el PDF */
+/* En el texto de una factura la razón social aparece rotulada, o pegada al
+   NIT. Se prueban los rótulos primero, que son inequívocos, y solo después
+   la vecindad del NIT. */
+var ROTULOS = [
+  /raz[oó]n\s*social\s*:?\s*([^\n\r|]{4,90})/i,
+  /nombre\s*o\s*raz[oó]n\s*social\s*:?\s*([^\n\r|]{4,90})/i,
+  /emisor\s*:?\s*([^\n\r|]{4,90})/i,
+  /facturador\s*(?:electr[oó]nico)?\s*:?\s*([^\n\r|]{4,90})/i,
+  /vendedor\s*:?\s*([^\n\r|]{4,90})/i,
+  /proveedor\s*:?\s*([^\n\r|]{4,90})/i
+];
+
+var BASURA = /^(nit|c\.?c\.?|cufe|factura|fecha|valor|total|iva|direcci|tel|email|correo|cliente|adquirente|comprador|resoluci|r[ée]gimen|regimen|documento|tiquete|recibo|comprobante|cuenta de cobro|orden|pedido|subtotal|descuento|forma de pago|medio de pago|moneda|observaci|detalle|concepto|cantidad|descripci|autorretenedor|contribuyente|responsable)/i;
+
+function limpiar(v) {
+  if (!v) return "";
+  v = String(v).replace(/\s+/g, " ").trim();
+  v = v.replace(/^[-–—:•*\s]+/, "").replace(/[-–—:•*\s]+$/, "");
+  v = v.split(/\s{2,}|\s+NIT\b|\s+N\.?I\.?T\b/i)[0].trim();
+  if (v.length < 4 || v.length > 90) return "";
+  if (BASURA.test(v)) return "";
+  if (!/[A-Za-zÁÉÍÓÚÑáéíóúñ]{3}/.test(v)) return "";
+  if (/^\d+$/.test(v)) return "";
+  return v;
+}
+
+/* Se recogen candidatos de todas las vías y gana el de mejor puntaje. Tomar el
+   primer patrón que acierte falla: en "Documento equivalente / 901555777 /
+   RESTAURANTE LA PROVINCIA SAS" la línea anterior al NIT es un rótulo, no el
+   proveedor. */
+var SOCIETARIA = /\b(S\.?A\.?S|S\.?A\.?|LTDA|LIMITADA|E\.?U|S\.? EN C|CIA|COMPA[NÑ]IA|ASOCIADOS|Y CIA)\b\.?$/i;
+
+function puntuar(v, origen) {
+  if (!v) return -1;
+  var p = 0;
+  if (origen === "rotulo") p += 60;
+  if (origen === "societaria") p += 40;
+  if (origen === "vecino") p += 20;
+  if (SOCIETARIA.test(v)) p += 30;
+  if (v === v.toUpperCase() && /[A-ZÁÉÍÓÚÑ]{4}/.test(v)) p += 10;
+  var pal = v.split(/\s+/).length;
+  if (pal >= 2 && pal <= 8) p += 10;
+  if (pal > 10) p -= 20;
+  if (/\d{6,}/.test(v)) p -= 30;
+  return p;
+}
+
+function razonSocial(txt, nit) {
+  if (!txt) return "";
+  var cands = [], i, m, v;
+
+  for (i = 0; i < ROTULOS.length; i++) {
+    m = txt.match(ROTULOS[i]);
+    if (m) { v = limpiar(m[1]); if (v) cands.push([v, "rotulo"]); }
+  }
+
+  var re3 = /([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9&.,\- ]{4,70}(?:S\.?A\.?S|S\.?A\.?|LTDA|LIMITADA|S\.? EN C|E\.?U)\.?)/g;
+  while ((m = re3.exec(txt)) !== null) {
+    v = limpiar(m[1]); if (v) cands.push([v, "societaria"]);
+  }
+
+  if (nit) {
+    var n = String(nit).replace(/\D/g, "");
+    var antes = new RegExp("([^\\n\\r|]{4,90})[\\s\\n\\r|]*(?:NIT|N\\.?I\\.?T\\.?)?[\\s:]*" + n, "i");
+    m = txt.match(antes);
+    if (m) { v = limpiar(m[1]); if (v) cands.push([v, "vecino"]); }
+    var despues = new RegExp(n + "[^\\n\\r]{0,14}[\\n\\r]+\\s*([^\\n\\r|]{4,90})", "i");
+    m = txt.match(despues);
+    if (m) { v = limpiar(m[1]); if (v) cands.push([v, "vecino"]); }
+  }
+
+  if (!cands.length) return "";
+  cands.sort(function (a, b) { return puntuar(b[0], b[1]) - puntuar(a[0], a[1]); });
+  return puntuar(cands[0][0], cands[0][1]) > 0 ? cands[0][0] : "";
+}
+
+window.MTALECTOR = {
+  deXML: deXML,
+  razonSocial: razonSocial,
+  proveedorDe: proveedorDe,
+  recordar: recordar,
+  memoria: memoria
+};
+})();
 </script>
 <script>/* =========================================================================
    MTA · APP DE GASTOS — núcleo
@@ -1480,6 +1711,10 @@ function esImagen(file) {
 function esPDF(file) {
   return file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
 }
+function esXML(file) {
+  return /\.xml$/i.test(file.name || "") ||
+         file.type === "text/xml" || file.type === "application/xml";
+}
 
 async function normalizar(file) {
   var bmp;
@@ -1515,11 +1750,11 @@ async function entraArchivo(file) {
             "». Use el botón Tomar foto.", "err");
       return;
     }
-  } else if (esPDF(file)) {
+  } else if (esPDF(file) || esXML(file)) {
     entrada = { nombre: file.name, peso: file.size, url: null };
   } else {
     av.hidden = true;
-    toast("Solo se admiten imágenes y archivos PDF.", "err");
+    toast("Se admiten imágenes, archivos PDF y el XML de la factura.", "err");
     return;
   }
 
@@ -1530,11 +1765,19 @@ async function entraArchivo(file) {
   var r = null;
   try { r = await leerSoporte(paraLeer); } catch (e) {}
   av.hidden = true;
-  if (r && r.datos) { diligenciar(r.datos); }
-  else { toast("No se pudo leer el QR. Diligencie los campos a mano.", "warn"); }
+  if (r && r.datos) {
+    var d = r.datos;
+    /* Razon social: el QR no la trae. Se busca en el texto del documento, y si
+       no aparece se recupera de lo que la app ya aprendio de ese NIT. */
+    if (!d.proveedor && r.texto) d.proveedor = window.MTALECTOR.razonSocial(r.texto, d.nitfac);
+    if (!d.proveedor && d.nitfac) d.proveedor = window.MTALECTOR.proveedorDe(d.nitfac);
+    diligenciar(d, r.via);
+  } else {
+    toast("No se pudo leer el soporte. Complete los campos a mano.", "warn");
+  }
 }
 
-function diligenciar(d) {
+function diligenciar(d, via) {
   var n = 0;
   function pon(id, v) { if (v != null && v !== "") { $(id).value = v; $(id).classList.add("auto"); n++; } }
   pon("#fNumero", d.numfac);
@@ -1545,9 +1788,16 @@ function diligenciar(d) {
   pon("#fOtros", d.valotroim);
   pon("#fTotal", d.valtolfac);
   pon("#fCufe", d.cufe);
+  pon("#fProveedor", d.proveedor);
   if (d.cufe) { $("#fTipo").value = "Factura electrónica"; }
   recalcular();
-  toast("Soporte leído: " + n + " campos diligenciados.", "ok");
+  var fuente = {xml:"del XML", texto:"del PDF", qr:"del código QR"}[via] || "del soporte";
+  toast("Leído " + fuente + ": " + n + " campos.", "ok");
+  if (!d.proveedor) {
+    setTimeout(function () {
+      toast("Falta el nombre del proveedor: escríbalo y la app lo recordará.", "warn");
+    }, 1800);
+  }
 }
 
 function recalcular() {
@@ -1603,6 +1853,9 @@ function guardarGasto(enviar) {
   if (c && c.RevisionObligatoria && !f.Descripcion) faltan.push("descripción (el concepto la exige)");
   if (faltan.length) { toast("Falta: " + faltan.join(", ") + ".", "err"); return; }
 
+  if (f.NitProveedor && f.NombreProveedor) {
+    window.MTALECTOR.recordar(f.NitProveedor, f.NombreProveedor);
+  }
   var g = M.crearGasto(f, archivos.slice());
   if (enviar) M.enviarGasto(g.ID);
   archivos = [];
@@ -1919,6 +2172,11 @@ function arrancar() {
   $("#inFoto").onchange = function () { Array.from(this.files).forEach(entraArchivo); this.value = ""; };
   $("#inArchivo").onchange = function () { Array.from(this.files).forEach(entraArchivo); this.value = ""; };
   ["fBase","fIva","fOtros","fTotal"].forEach(function (id) { $("#" + id).oninput = recalcular; });
+  $("#fNit").oninput = function () {
+    if ($("#fProveedor").value.trim()) return;
+    var p = window.MTALECTOR.proveedorDe(this.value);
+    if (p) { $("#fProveedor").value = p; $("#fProveedor").classList.add("auto"); }
+  };
   $("#fConcepto").onchange = ajustarIVA;
   $("#fTipo").onchange = ajustarIVA;
   $("#btnGuardar").onclick = function () { guardarGasto(false); };
@@ -1937,8 +2195,8 @@ function arrancar() {
   };
   listaArchivos(); recalcular(); ajustarIVA();
   ir(location.hash ? location.hash.slice(1) : "captura");
-  registrarSW();
-  prepararInstalacion();
+  try { registrarSW(); } catch (e) {}
+  try { prepararInstalacion(); } catch (e) {}
 }
 
 /* ====================== PWA ====================== */
@@ -1949,8 +2207,10 @@ function registrarSW() {
 }
 
 function instalada() {
-  return window.matchMedia("(display-mode: standalone)").matches ||
-         window.navigator.standalone === true;
+  try {
+    if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return true;
+  } catch (e) {}
+  return window.navigator.standalone === true;
 }
 
 function prepararInstalacion() {
