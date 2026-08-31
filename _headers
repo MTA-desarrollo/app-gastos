@@ -1,0 +1,8 @@
+# Para hostings que leen _headers (Netlify, Cloudflare Pages)
+/*
+  Permissions-Policy: camera=(self), microphone=(), geolocation=()
+  X-Content-Type-Options: nosniff
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Content-Type: application/manifest+json
