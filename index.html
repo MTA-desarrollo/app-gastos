@@ -248,6 +248,28 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
 .itxt span{display:block}
 .btn.chico{padding:8px 15px;font-size:13px;flex:none}
 .ix{border:0;background:transparent;color:var(--deep);font-size:21px;cursor:pointer;padding:0 3px;flex:none;opacity:.6}
+.velo{position:fixed;inset:0;z-index:70;background:rgba(10,20,32,.55);
+      display:flex;align-items:flex-end;justify-content:center;
+      backdrop-filter:blur(3px);animation:aparece .2s ease}
+@keyframes aparece{from{opacity:0}to{opacity:1}}
+.hoja{background:var(--paper);border-radius:18px 18px 0 0;padding:18px 17px calc(20px + env(safe-area-inset-bottom));
+      width:100%;max-width:520px;box-shadow:0 -8px 40px rgba(0,0,0,.3);
+      animation:sube .26s cubic-bezier(.2,.8,.3,1)}
+@keyframes sube{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.hcab{display:flex;align-items:center;gap:11px;margin-bottom:16px}
+.hcab b{display:block;font-size:16px}
+.hcab span{font-size:12px;color:var(--faint)}
+.hcab .ix{margin-left:auto;font-size:24px;color:var(--faint);opacity:.7}
+.pasoi{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.pnum{width:26px;height:26px;border-radius:50%;background:var(--brass);color:#fff;flex:none;
+      display:grid;place-items:center;font-size:13px;font-weight:700}
+.ptxt{flex:1;min-width:0}
+.ptxt b{display:block;font-size:13.5px;line-height:1.3}
+.ptxt span{font-size:11.5px;color:var(--slate);line-height:1.4}
+.pico{width:24px;height:24px;stroke:var(--brass);fill:none;stroke-width:1.7;flex:none;opacity:.8}
+.ojo{background:var(--warn-bg);color:var(--warn);border-radius:9px;padding:10px 12px;
+     font-size:11.5px;line-height:1.5;margin:14px 0 0}
+.hoja > .btn{width:100%;margin-top:15px}
 .pie{font-size:11px;color:var(--faint);text-align:center;padding:14px 0 4px}
 .pie button{background:none;border:0;color:var(--err);font:inherit;font-size:11px;
             text-decoration:underline;cursor:pointer}
@@ -269,11 +291,57 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
     <div class="iico">MTA</div>
     <div class="itxt">
       <b>Instale la app en su celular</b>
-      <span id="guiaIOS" hidden>Toque <b>Compartir</b> y luego <b>Agregar a pantalla de inicio</b>.</span>
       <span>Se abre a pantalla completa y funciona sin conexión.</span>
     </div>
     <button class="btn pri chico" id="btnInstalar" hidden>Instalar</button>
+    <button class="btn pri chico" id="btnGuiaIOS" hidden>Cómo</button>
     <button class="ix" id="cerrarInst" title="Cerrar">&times;</button>
+  </div>
+</div>
+
+<!-- Guía del gesto de Safari. iOS no ofrece botón de instalar: hay que enseñarlo. -->
+<div class="velo" id="veloIOS" hidden>
+  <div class="hoja">
+    <div class="hcab">
+      <div class="iico">MTA</div>
+      <div><b>Instalar Gastos MTA</b><span>Tres pasos en su iPhone</span></div>
+      <button class="ix" id="cerrarGuia">&times;</button>
+    </div>
+
+    <div class="pasoi">
+      <div class="pnum">1</div>
+      <div class="ptxt">
+        <b>Toque Compartir</b>
+        <span>El cuadro con la flecha hacia arriba, en la barra de abajo.</span>
+      </div>
+      <svg class="pico" viewBox="0 0 24 24"><path d="M12 15V3m0 0L8 7m4-4l4 4"/><path d="M4 13v6a2 2 0 002 2h12a2 2 0 002-2v-6"/></svg>
+    </div>
+
+    <div class="pasoi">
+      <div class="pnum">2</div>
+      <div class="ptxt">
+        <b>Baje y toque «Agregar a pantalla de inicio»</b>
+        <span>Está más abajo en la lista. Hay que deslizar para verlo.</span>
+      </div>
+      <svg class="pico" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></svg>
+    </div>
+
+    <div class="pasoi">
+      <div class="pnum">3</div>
+      <div class="ptxt">
+        <b>Toque Agregar</b>
+        <span>Arriba a la derecha. El icono queda en su pantalla de inicio.</span>
+      </div>
+      <svg class="pico" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+    </div>
+
+    <p class="ojo" id="ojoSafari" hidden>
+      <b>Antes de empezar:</b> esta página tiene que estar abierta en <b>Safari</b>.
+      Si la abrió desde WhatsApp, Teams o Chrome, toque el menú y elija
+      <b>Abrir en Safari</b>.
+    </p>
+
+    <button class="btn pri" id="okGuia">Entendido</button>
   </div>
 </div>
 
@@ -2213,9 +2281,31 @@ function instalada() {
   return window.navigator.standalone === true;
 }
 
+function esIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+         (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+/* En iOS, «Agregar a pantalla de inicio» solo existe en Safari. Un navegador
+   embebido —el de WhatsApp, Teams o Chrome iOS— no lo ofrece, así que hay que
+   avisarlo antes de que el usuario intente el gesto y no lo encuentre. */
+function esSafariReal() {
+  var ua = navigator.userAgent;
+  if (/CriOS|FxiOS|EdgiOS|OPiOS|Instagram|FBAN|FBAV|Line|MicroMessenger/i.test(ua)) return false;
+  if (/Teams|Outlook|WhatsApp/i.test(ua)) return false;
+  return /Safari/i.test(ua);
+}
+
 function prepararInstalacion() {
-  var barra = $("#instalar"), btn = $("#btnInstalar"), guia = $("#guiaIOS");
+  var barra = $("#instalar"), btn = $("#btnInstalar"), btnG = $("#btnGuiaIOS");
+  var velo = $("#veloIOS");
   if (instalada()) return;
+
+  function abrirGuia() {
+    $("#ojoSafari").hidden = esSafariReal();
+    velo.hidden = false;
+  }
+  function cerrarGuia() { velo.hidden = true; }
 
   var evento = null;
   window.addEventListener("beforeinstallprompt", function (e) {
@@ -2223,7 +2313,7 @@ function prepararInstalacion() {
     evento = e;
     barra.hidden = false;
     btn.hidden = false;
-    guia.hidden = true;
+    btnG.hidden = true;
   });
 
   btn.onclick = async function () {
@@ -2234,15 +2324,23 @@ function prepararInstalacion() {
     evento = null;
   };
 
-  /* Safari en iOS no dispara beforeinstallprompt: se explica el gesto */
-  var esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-              (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  if (esIOS) {
+  if (esIOS()) {
     barra.hidden = false;
     btn.hidden = true;
-    guia.hidden = false;
+    btnG.hidden = false;
+    btnG.onclick = abrirGuia;
+    /* La primera visita abre la guía sola: el gesto no es evidente */
+    try {
+      if (!localStorage.getItem("mtag.guiaIOS")) {
+        setTimeout(abrirGuia, 1200);
+        localStorage.setItem("mtag.guiaIOS", "1");
+      }
+    } catch (e) {}
   }
 
+  $("#cerrarGuia").onclick = cerrarGuia;
+  $("#okGuia").onclick = cerrarGuia;
+  velo.onclick = function (e) { if (e.target === velo) cerrarGuia(); };
   $("#cerrarInst").onclick = function () { barra.hidden = true; };
   window.addEventListener("appinstalled", function () { barra.hidden = true; });
 }
