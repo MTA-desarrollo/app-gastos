@@ -192,6 +192,25 @@ label.f > span{display:block;font-size:12px;color:var(--slate);margin-bottom:5px
 .barra .t{flex:1;font-size:12.5px;color:var(--slate)}
 .barra b{font-family:"Source Code Pro",ui-monospace,monospace}
 
+/* Tabla de trazabilidad · en el celular se desplaza en horizontal */
+.tenv{background:var(--paper);border:1px solid var(--line);border-radius:12px;
+      box-shadow:var(--sombra);overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tab-g{width:100%;border-collapse:collapse;font-size:12.5px;min-width:640px}
+.tab-g th{background:var(--paper-2);color:var(--slate);font-weight:600;font-size:11px;
+          text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tab-g td{padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+.tab-g tbody tr:last-child td{border-bottom:0}
+.tab-g .cn{text-align:right;font-family:"Source Code Pro",ui-monospace,monospace;
+           font-variant-numeric:tabular-nums;white-space:nowrap}
+.tab-g .ctot{font-weight:600}
+.tab-g .cref{font-family:"Source Code Pro",ui-monospace,monospace;font-size:11.5px;white-space:nowrap}
+.tab-g .cref i{display:block;font-style:normal;font-size:10.5px;color:var(--faint);margin-top:2px}
+.tab-g .cnit{font-family:"Source Code Pro",ui-monospace,monospace;font-size:11.5px;color:var(--slate)}
+.tab-g .mot{display:block;font-style:normal;font-size:10.5px;color:var(--err);margin-top:4px;max-width:190px}
+.tab-g .mini{margin:5px 0 0;padding:4px 9px;font-size:11px}
+.tab-g tfoot td{background:var(--paper-2);font-weight:600;border-top:1.5px solid var(--line);border-bottom:0}
+nav.pocas .tab{max-width:150px}
+nav.pocas{justify-content:center;gap:6px}
 .tabla{border-top:1px solid var(--line);margin:8px 0}
 .tr{display:grid;grid-template-columns:1fr auto auto auto;gap:9px;padding:6px 0;
     border-bottom:1px solid var(--line);font-size:12px;font-family:"Source Code Pro",ui-monospace,monospace}
@@ -348,7 +367,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
 <main class="wrap">
 
 <!-- ============ CAPTURA ============ -->
-<section class="pane" id="pane-captura">
+<section class="pane" id="pane-home">
   <div class="card">
     <p class="tit">Soporte del gasto</p>
     <div class="dropzone">
@@ -413,7 +432,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
 <!-- ============ MIS GASTOS ============ -->
 <section class="pane" id="pane-mis" hidden>
   <div class="resumen"><span id="sumN">0 gastos</span><b id="sumV">$ 0</b></div>
-  <div id="filas"></div>
+  <div id="tablaMis"></div>
 </section>
 
 <!-- ============ APROBACIÓN OPERATIVA ============ -->
@@ -477,8 +496,8 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
 </main>
 
 <nav>
-  <button class="tab on" data-p="captura"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Nuevo</button>
-  <button class="tab" data-p="mis"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Mis gastos</button>
+  <button class="tab on" data-p="home"><svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 001 1h12a1 1 0 001-1V9.5"/></svg>Home</button>
+  <button class="tab" data-p="mis"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>Mis gastos</button>
   <button class="tab" data-p="aprob"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Aprobar</button>
   <button class="tab" data-p="consol"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg>Reembolsos</button>
   <button class="tab" data-p="final"><svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>Final</button>
@@ -978,12 +997,35 @@ var CENTROS = ["Contabilidad","Jurídica / Litigios","Jurídica / Corporativo","
 var TIPOS_SOPORTE = ["Factura electrónica","Documento equivalente POS","Tiquete",
                      "Recibo del proveedor","Proveedor no obligado a facturar"];
 
+/* ---------- roles y qué pantalla ve cada uno ----------
+   El originador solo necesita capturar y ver sus propios gastos. Mostrarle la
+   bandeja de aprobación o la exportación contable estorba y confunde. */
+var PANTALLAS = {
+  "Originador":           ["home", "mis"],
+  "Aprobador operativo":  ["home", "mis", "aprob"],
+  "Aprobador final":      ["home", "mis", "final"],
+  "Contabilidad":         ["home", "mis", "consol", "conta", "bitacora"],
+  "Todos":                ["home", "mis", "aprob", "consol", "final", "conta", "bitacora"]
+};
+
 var USUARIOS = [
   {Email:"gabriel@mta.com.co",  Nombre:"Gabriel",            Rol:"Todos"},
   {Email:"colab@mta.com.co",    Nombre:"Colaborador prueba", Rol:"Originador"},
   {Email:"aprob1@mta.com.co",   Nombre:"Aprobador operativo",Rol:"Aprobador operativo"},
-  {Email:"aprob2@mta.com.co",   Nombre:"Aprobador final",    Rol:"Aprobador final"}
+  {Email:"aprob2@mta.com.co",   Nombre:"Aprobador final",    Rol:"Aprobador final"},
+  {Email:"conta@mta.com.co",    Nombre:"Contabilidad",       Rol:"Contabilidad"}
 ];
+
+function pantallasDe(rol) { return PANTALLAS[rol] || PANTALLAS["Originador"]; }
+function puedeVer(p) { return pantallasDe(usuario().Rol).indexOf(p) >= 0; }
+
+/* Estado simplificado para el tablero del originador */
+function estadoSimple(e) {
+  if (e === "Borrador") return "Borrador";
+  if (e === "Rechazado") return "Rechazado";
+  if (e === "En aprobación operativa") return "Pendiente";
+  return "Aprobado";        /* Aprobado, En reembolso, Contabilizado */
+}
 
 /* ---------- estado ---------- */
 var S = {
@@ -1231,6 +1273,8 @@ function diasParaLimite(){
 
 window.MTAG = {
   S: S, CONCEPTOS: CONCEPTOS, CENTROS: CENTROS, TIPOS_SOPORTE: TIPOS_SOPORTE,
+  PANTALLAS: PANTALLAS, pantallasDe: pantallasDe, puedeVer: puedeVer,
+  estadoSimple: estadoSimple,
   USUARIOS: USUARIOS, PARAMETROS: PARAMETROS,
   guardar: guardar, cargar: cargar, reiniciar: reiniciar,
   ref: ref, hoy: hoy, pesos: pesos, fechaCorta: fechaCorta,
@@ -1722,7 +1766,25 @@ var CLASE_ESTADO = {
 function chip(est) { return '<span class="chip ' + (CLASE_ESTADO[est] || "e-bor") + '">' + esc(est) + "</span>"; }
 
 /* ====================== NAVEGACIÓN ====================== */
+function primeraPantalla() {
+  var v = M.pantallasDe(M.usuario().Rol);
+  var h = location.hash ? location.hash.slice(1) : "";
+  return v.indexOf(h) >= 0 ? h : v[0];
+}
+
+/* Cada rol ve solo sus pantallas. Al originador no le sirve la bandeja de
+   aprobacion ni la exportacion contable: le estorban. */
+function aplicarRol() {
+  var v = M.pantallasDe(M.usuario().Rol);
+  $$(".tab").forEach(function (b) { b.hidden = v.indexOf(b.dataset.p) < 0; });
+  var nav = $("nav");
+  nav.classList.toggle("pocas", v.length <= 3);
+  if (v.indexOf(pantalla) < 0) ir(v[0]);
+}
+
 function ir(p) {
+  var v = M.pantallasDe(M.usuario().Rol);
+  if (v.indexOf(p) < 0) p = v[0];
   pantalla = p;
   $$(".pane").forEach(function (x) { x.hidden = true; });
   $("#pane-" + p).hidden = false;
@@ -1943,27 +2005,56 @@ function limpiar() {
 }
 
 /* ====================== MIS GASTOS ====================== */
+/* Tabla de trazabilidad del originador. Columnas fijadas por el usuario:
+   proveedor, NIT, subtotal, IVA, total y estado. */
+var CLASE_SIMPLE = {"Borrador":"e-bor","Pendiente":"e-apr","Aprobado":"e-ok","Rechazado":"e-rec"};
+
 function pintarMis() {
-  var gs = M.misGastos(), c = $("#filas");
-  c.innerHTML = "";
+  var gs = M.misGastos(), c = $("#tablaMis");
   $("#sumN").textContent = gs.length + (gs.length === 1 ? " gasto" : " gastos");
   $("#sumV").textContent = M.pesos(gs.reduce(function (a, g) { return a + (+g.ValorTotalSoporte || 0); }, 0));
-  if (!gs.length) { c.innerHTML = '<p class="vacio">Todavía no ha cargado ningún gasto.</p>'; return; }
-  gs.forEach(function (g) {
-    var f = el("div", "fila " + (CLASE_ESTADO[g.Estado] || ""));
-    f.innerHTML =
-      '<div class="f1"><b>' + esc(g.Title) + "</b>" + chip(g.Estado) + "</div>" +
-      '<div class="f2"><span>' + M.fechaCorta(g.FechaGasto) + "</span>" +
-      "<span>" + esc(g.NumeroDocumento || "—") + "</span>" +
-      "<span>" + esc(g.CodigoConcepto) + "</span></div>" +
-      '<div class="f3">' + esc(g.Concepto || "") + '<b>' + M.pesos(g.ValorTotalSoporte) + "</b></div>" +
-      (g.Estado === "Rechazado" && g.MotivoRechazo ? '<div class="motivo">Motivo: ' + esc(g.MotivoRechazo) + "</div>" : "");
-    if (g.Estado === "Borrador") {
-      var b = el("button", "mini", "Enviar a aprobación");
-      b.onclick = function () { M.enviarGasto(g.ID); toast(g.Title + " enviado."); pintarMis(); };
-      f.appendChild(b);
-    }
-    c.appendChild(f);
+
+  if (!gs.length) {
+    c.innerHTML = '<p class="vacio">Todavía no ha cargado ningún gasto.</p>';
+    return;
+  }
+
+  var filas = gs.map(function (g) {
+    var est = M.estadoSimple(g.Estado);
+    return '<tr>' +
+      '<td class="cref">' + esc(g.Title) + "<i>" + M.fechaCorta(g.FechaGasto) + "</i></td>" +
+      "<td>" + esc(g.NombreProveedor || "—") + "</td>" +
+      '<td class="cnit">' + esc(g.NitProveedor || "—") + "</td>" +
+      '<td class="cn">' + M.pesos(g.ValorBase) + "</td>" +
+      '<td class="cn">' + M.pesos(g.IVA) + "</td>" +
+      '<td class="cn ctot">' + M.pesos(g.ValorTotalSoporte) + "</td>" +
+      '<td><span class="chip ' + (CLASE_SIMPLE[est] || "e-bor") + '">' + est + "</span>" +
+      (g.Estado === "Borrador" ? '<button class="mini env" data-id="' + g.ID + '">Enviar</button>' : "") +
+      (g.MotivoRechazo ? '<i class="mot">' + esc(g.MotivoRechazo) + "</i>" : "") +
+      "</td></tr>";
+  }).join("");
+
+  var t = gs.reduce(function (a, g) {
+    a.b += (+g.ValorBase || 0); a.i += (+g.IVA || 0); a.t += (+g.ValorTotalSoporte || 0);
+    return a;
+  }, {b: 0, i: 0, t: 0});
+
+  c.innerHTML =
+    '<div class="tenv"><table class="tab-g"><thead><tr>' +
+    "<th>Referencia</th><th>Proveedor</th><th>NIT</th>" +
+    '<th class="cn">Subtotal</th><th class="cn">IVA</th><th class="cn">Total</th><th>Estado</th>' +
+    "</tr></thead><tbody>" + filas + "</tbody><tfoot><tr>" +
+    '<td colspan="3">Total · ' + gs.length + " gasto(s)</td>" +
+    '<td class="cn">' + M.pesos(t.b) + '</td><td class="cn">' + M.pesos(t.i) +
+    '</td><td class="cn ctot">' + M.pesos(t.t) + "</td><td></td>" +
+    "</tr></tfoot></table></div>";
+
+  $$(".env", c).forEach(function (b) {
+    b.onclick = function () {
+      M.enviarGasto(+b.dataset.id);
+      toast("Gasto enviado a aprobación.");
+      pintarMis();
+    };
   });
 }
 
@@ -2223,7 +2314,11 @@ function arrancar() {
     return '<option value="' + x.Email + '">' + esc(x.Nombre + " · " + x.Rol) + "</option>";
   }).join("");
   u.value = M.S.usuario;
-  u.onchange = function () { M.S.usuario = this.value; M.guardar(); ir(pantalla); };
+  u.onchange = function () {
+    M.S.usuario = this.value; M.guardar();
+    aplicarRol();
+    ir(M.puedeVer(pantalla) ? pantalla : M.pantallasDe(M.usuario().Rol)[0]);
+  };
 
   var p = $("#pAuto");
   p.checked = M.S.Parametros.ProhibirAutoaprobacion === "Sí";
@@ -2262,7 +2357,8 @@ function arrancar() {
     if (confirm("Se borran todos los datos de prueba de este navegador. ¿Continuar?")) M.reiniciar();
   };
   listaArchivos(); recalcular(); ajustarIVA();
-  ir(location.hash ? location.hash.slice(1) : "captura");
+  aplicarRol();
+  ir(primeraPantalla());
   try { registrarSW(); } catch (e) {}
   try { prepararInstalacion(); } catch (e) {}
 }
