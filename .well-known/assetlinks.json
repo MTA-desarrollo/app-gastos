@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "co.mtalegal.appgastos",
+    "sha256_cert_fingerprints": ["73:7A:CF:46:28:32:4F:99:31:0E:4B:4A:CC:F2:94:6C:29:85:9E:35:AA:6B:E3:E2:E8:4C:86:DD:C8:30:0F:76"]
+  }
+}]
