@@ -25,6 +25,7 @@
   --deep:#00548A; --deeper:#003D66;
   --ok:#12724A; --ok-bg:#D6EEE1; --warn:#8A5A00; --warn-bg:#FBEDD2;
   --err:#9B1C2B; --err-bg:#F7DFE2; --blue:#0077C0; --blue-bg:#DCEDFA;
+  --rosa:#A03A5B; --rosa-bg:#FDEEF3; --rosa-bor:#F0C9D7;
   --gris:#6D6E71; --gris-bg:#E3E7EB;
   --sombra:0 1px 2px rgba(16,42,67,.06), 0 4px 14px rgba(16,42,67,.06);
   --sombra-alta:0 2px 4px rgba(16,42,67,.08), 0 10px 28px rgba(16,42,67,.10);
@@ -36,6 +37,7 @@
     --deep:#0E2739; --deeper:#081722;
     --ok:#6DD69C; --ok-bg:#0F2C1D; --warn:#E0B15F; --warn-bg:#33260D;
     --err:#F09AA5; --err-bg:#3A1219; --blue:#3AA0E0; --blue-bg:#0E2739;
+    --rosa:#F2A8BF; --rosa-bg:#331520; --rosa-bor:#4A2030;
     --gris:#A8ADB4; --gris-bg:#212A34;
     --sombra:0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
     --sombra-alta:0 2px 4px rgba(0,0,0,.5), 0 10px 28px rgba(0,0,0,.4);
@@ -90,7 +92,7 @@ label.f > span{display:block;font-size:12px;color:var(--slate);margin-bottom:5px
 .auto{background:var(--brass-soft)!important;border-color:var(--brass)!important;color:var(--ink)}
 /* Los campos leídos por OCR se marcan distinto: el OCR interpreta píxeles y
    puede equivocarse en un dígito. El usuario debe verificarlos. */
-.auto-ocr{background:var(--warn-bg)!important;border-color:var(--warn)!important;color:var(--ink)}
+.auto-ocr{background:var(--rosa-bg)!important;border-color:var(--rosa-bor)!important;color:var(--ink)}
 .avisoocr{margin-top:11px}
 .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate)}
 .chk input{width:auto}
@@ -124,8 +126,9 @@ label.f > span{display:block;font-size:12px;color:var(--slate);margin-bottom:5px
       border-radius:50%;animation:g .7s linear infinite}
 @keyframes g{to{transform:rotate(360deg)}}
 
-.aviso{background:var(--warn-bg);color:var(--warn);border-radius:9px;padding:8px 11px;
-       font-size:12px;font-weight:500;margin-top:8px}
+.aviso{background:var(--rosa-bg);color:var(--rosa);border:1px solid var(--rosa-bor);
+       border-radius:10px;padding:10px 13px;font-size:12.5px;font-weight:500;margin-top:9px;
+       line-height:1.5}
 .totrow{display:flex;justify-content:space-between;align-items:baseline;
         border-top:1px solid var(--line);margin-top:9px;padding-top:9px;font-size:12.5px;color:var(--slate)}
 
@@ -246,7 +249,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
   font-weight:500;opacity:0;transition:.28s;pointer-events:none;max-width:92vw;text-align:center}
 .toast.ver{transform:translate(-50%,0);opacity:1}
 .toast.err{background:var(--err);color:#fff}
-.toast.warn{background:var(--warn);color:#fff}
+.toast.warn{background:var(--rosa);color:#fff}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:13px}
 .kpi{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--sombra)}
 .kpi span{display:block;font-size:11px;color:var(--faint);letter-spacing:.01em}
@@ -449,24 +452,25 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
   </div>
 
   <div class="card">
+    <p class="tit">Valores</p>
+    <p class="hint">«Otros» reúne todo lo que no es base ni IVA: impuesto al consumo, propina, servicio.</p>
+    <div class="tres">
+      <label class="f"><span>Base</span><input id="fBase" inputmode="decimal" class="num moneda"></label>
+      <label class="f"><span>IVA</span><input id="fIva" inputmode="decimal" class="num moneda"></label>
+      <label class="f"><span>Otros</span><input id="fOtros" inputmode="decimal" class="num moneda"></label>
+    </div>
+    <label class="f"><span>Valor total del soporte</span><input id="fTotal" inputmode="decimal" class="num moneda"></label>
+    <div class="totrow"><span>Suma de los componentes</span><b class="num" id="calc">$ 0</b></div>
+    <div class="aviso" id="avisoDif" hidden></div>
+  </div>
+
+  <div class="card">
     <p class="tit">Clasificación</p>
     <label class="f"><span>Concepto</span><select id="fConcepto"></select></label>
     <p class="hint" id="hintConcepto"></p>
     <label class="f"><span>Centro de costo</span><select id="fCentro"></select></label>
     <label class="f"><span>Descripción <b id="reqDesc" hidden style="color:var(--warn)">· obligatoria para este concepto</b></span>
       <textarea id="fDesc" rows="2"></textarea></label>
-  </div>
-
-  <div class="card">
-    <p class="tit">Valores</p>
-    <div class="tres">
-      <label class="f"><span>Base</span><input id="fBase" type="number" inputmode="decimal" class="num"></label>
-      <label class="f"><span>IVA</span><input id="fIva" type="number" inputmode="decimal" class="num"></label>
-      <label class="f"><span>Otros</span><input id="fOtros" type="number" inputmode="decimal" class="num"></label>
-    </div>
-    <label class="f"><span>Valor total del soporte</span><input id="fTotal" type="number" inputmode="decimal" class="num"></label>
-    <div class="totrow"><span>Suma de los componentes</span><b class="num" id="calc">$ 0</b></div>
-    <div class="aviso" id="avisoDif" hidden></div>
   </div>
 
   <div class="btns">
@@ -615,14 +619,23 @@ async function qrDesdeBlob(blob){
 }
 
 /* ---- PDF: texto e imágenes, sin librerías externas ---- */
+/* DecompressionStream es más estricto que otros descompresores: si sobra un
+   solo byte después del flujo comprimido, aborta con «Trailing junk». Los PDF
+   dejan casi siempre un CR o un LF antes de «endstream». Se prueba recortando
+   el final, que es donde está la basura. */
 async function inflar(bytes){
+  var recortes = [0, 1, 2, 3, 4];
   var modos = ["deflate", "deflate-raw"];
-  for(var i=0;i<modos.length;i++){
-    try{
-      var st = new Blob([bytes]).stream().pipeThrough(new DecompressionStream(modos[i]));
-      var ab = await new Response(st).arrayBuffer();
-      if(ab.byteLength) return new Uint8Array(ab);
-    }catch(e){}
+  for(var r=0;r<recortes.length;r++){
+    var b = recortes[r] ? bytes.subarray(0, bytes.length - recortes[r]) : bytes;
+    if(b.length < 8) continue;
+    for(var i=0;i<modos.length;i++){
+      try{
+        var st = new Blob([b]).stream().pipeThrough(new DecompressionStream(modos[i]));
+        var ab = await new Response(st).arrayBuffer();
+        if(ab.byteLength) return new Uint8Array(ab);
+      }catch(e){}
+    }
   }
   return null;
 }
@@ -695,7 +708,21 @@ async function trozosPDF(buf){
     var fin = buscar(buf, "endstream", d);
     if(fin < 0) break;
     var dict = aTexto(buf.subarray(Math.max(0, ini-800), ini));
-    trozos.push({dict:dict, datos:buf.subarray(d, fin)});
+    /* Recortar la ventana al último "<<" para no arrastrar el objeto anterior */
+    var ult = dict.lastIndexOf("<<");
+    if(ult > 0) dict = dict.substring(ult);
+    /* El diccionario declara el tamaño exacto del flujo. Usarlo evita
+       arrastrar el salto de línea que los PDF dejan antes de "endstream",
+       que DecompressionStream rechaza como basura. */
+    /* La ventana de 800 bytes puede contener el diccionario del objeto
+       ANTERIOR. El que vale es el ÚLTIMO, que es el del flujo que empieza aquí. */
+    var todos = dict.match(/\/Length\s+(\d+)/g);
+    var hasta = fin;
+    if(todos && todos.length){
+      var L = parseInt(todos[todos.length - 1].replace(/\D/g, ""), 10);
+      if(L > 0 && d + L <= fin) hasta = d + L;
+    }
+    trozos.push({dict:dict, datos:buf.subarray(d, hasta)});
     pos = fin + 9; n++;
   }
   return trozos;
@@ -714,15 +741,22 @@ async function datosDePDF(file){
     if(/(BT|Tj|TJ)/.test(s)) texto += " " + cadenasPDF(s);
   }
   textoCrudo = texto;
-  /* 1a. formato del QR de la DIAN, si el PDF lo trae como texto */
+  /* 1a. formato del QR de la DIAN, si el PDF lo trae como texto.
+     Encontrar solo el CUFE no basta: el hash de 96 caracteres aparece en toda
+     factura electrónica, y quedarse ahí desperdicia el resto del documento. */
   var d = analizarTexto(texto);
-  if(hayDatos(d)) return {datos:d, via:"texto", texto:texto};
+  var soloCufe = d && d.cufe && !d.numfac && !d.valtolfac;
+  if(hayDatos(d) && !soloCufe) return {datos:d, via:"texto", texto:texto};
   /* 1b. representación gráfica: rótulos en español. Es la ruta que resuelve
      las facturas electrónicas que llegan por correo en PDF. */
   if(window.MTAREPRE){
     var dr = window.MTAREPRE.deRepresentacion(texto);
-    if(dr) return {datos:dr, via:"pdf", texto:texto};
+    if(dr){
+      if(d && d.cufe && !dr.cufe) dr.cufe = d.cufe;
+      return {datos:dr, via:"pdf", texto:texto};
+    }
   }
+  if(hayDatos(d)) return {datos:d, via:"texto", texto:texto};
   /* 2. imágenes incrustadas */
   for(var k=0;k<trozos.length;k++){
     var t = trozos[k];
@@ -1106,10 +1140,14 @@ function nitEmisor(txt) {
     if (TECNOLOGICOS.test(alrededor)) continue;           /* el del software */
     if (vistos.indexOf(n) < 0) vistos.push(n);
   }
-  /* Sin rótulo NIT: un número suelto de 9 o 10 dígitos que no sea el propio */
+  /* Sin rótulo NIT: un número de nueve dígitos que empiece en 8 o 9, que es
+     el rango de los NIT de empresa. Los de diez dígitos se descartan: en
+     Colombia un teléfono fijo también los tiene, y sale en toda factura. */
   if (!vistos.length) {
-    var re2 = /\b(8\d{8}|9\d{8}|\d{10})\b/g;
+    var re2 = /\b(8\d{8}|9\d{8})\b/g;
     while ((m = re2.exec(txt)) !== null) {
+      var antes = txt.substring(Math.max(0, m.index - 40), m.index);
+      if (/tel[eé]fono|celular|m[oó]vil|cuenta|ahorros|corriente|autorizaci[oó]n/i.test(antes)) continue;
       if (m[1] !== NIT_PROPIO && vistos.indexOf(m[1]) < 0) vistos.push(m[1]);
     }
   }
@@ -2322,12 +2360,50 @@ window.MTAAVISO = function (texto) {
   if (e) { e.hidden = false; e.querySelector("span:last-child").textContent = texto; }
 };
 
+/* Los avisos de atención duran más: el usuario tiene que alcanzar a leerlos
+   mientras mira el formulario. */
 function toast(msg, tipo) {
   var t = $("#toast");
   t.className = "toast " + (tipo || "ok") + " ver";
   t.textContent = msg;
   clearTimeout(t._t);
-  t._t = setTimeout(function () { t.className = "toast"; }, 3400);
+  var dura = (tipo === "warn" || tipo === "err") ? 9000 : 3400;
+  t._t = setTimeout(function () { t.className = "toast"; }, dura);
+}
+
+/* ---------- importes con separador de miles ---------- */
+function aNumero(v) {
+  if (v == null || v === "") return 0;
+  var s = String(v).replace(/[^\d.,-]/g, "");
+  if (!s) return 0;
+  var m = s.match(/^(.*)([.,])(\d{1,2})$/);
+  s = m ? m[1].replace(/[.,]/g, "") + "." + m[3] : s.replace(/[.,]/g, "");
+  var n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function formatoMoneda(n) {
+  if (n === "" || n == null || isNaN(n)) return "";
+  var dec = Math.abs(n % 1) > 0.004 ? 2 : 0;
+  return Number(n).toLocaleString("es-CO", {
+    minimumFractionDigits: dec, maximumFractionDigits: 2
+  });
+}
+
+/* Se formatea al salir del campo, no al teclear: reescribir mientras el
+   usuario escribe le mueve el cursor y estorba. */
+function activarMoneda() {
+  $$(".moneda").forEach(function (e) {
+    e.addEventListener("blur", function () {
+      if (!this.value.trim()) return;
+      this.value = formatoMoneda(aNumero(this.value));
+      recalcular();
+    });
+    e.addEventListener("focus", function () {
+      var n = aNumero(this.value);
+      this.value = n ? String(n) : "";
+    });
+  });
 }
 
 var CLASE_ESTADO = {
@@ -2495,10 +2571,22 @@ function diligenciar(d, via) {
   pon("#fNumero", d.numfac);
   if (d.fecfac) { pon("#fFecha", d.fecfac); }
   pon("#fNit", d.nitfac);
-  pon("#fBase", d.valfac);
-  pon("#fIva", d.valiva);
-  pon("#fOtros", d.valotroim);
-  pon("#fTotal", d.valtolfac);
+  /* «Otros» reúne todo lo que no es base ni IVA. Si el documento trae un
+     total mayor que la suma de base más IVA, esa diferencia son impuestos al
+     consumo, propina o servicio, y va a «Otros». Es lo que hace una tirilla de
+     restaurante, donde la propina no aparece rotulada como impuesto. */
+  var nb = window.MTAREPRE ? window.MTAREPRE.limpiarNumero(d.valfac) : null;
+  var ni = window.MTAREPRE ? window.MTAREPRE.limpiarNumero(d.valiva) : null;
+  var no = window.MTAREPRE ? window.MTAREPRE.limpiarNumero(d.valotroim) : null;
+  var nt = window.MTAREPRE ? window.MTAREPRE.limpiarNumero(d.valtolfac) : null;
+  if (nt && nb) {
+    var resto = nt - nb - (ni || 0);
+    if (resto > 1 && Math.abs(resto - (no || 0)) > 1) no = resto;
+  }
+  pon("#fBase", nb != null ? formatoMoneda(nb) : d.valfac);
+  pon("#fIva", ni ? formatoMoneda(ni) : "");
+  pon("#fOtros", no ? formatoMoneda(no) : "");
+  pon("#fTotal", nt != null ? formatoMoneda(nt) : d.valtolfac);
   pon("#fCufe", d.cufe);
   pon("#fProveedor", d.proveedor);
   if (d.cufe) { $("#fTipo").value = "Factura electrónica"; }
@@ -2515,8 +2603,9 @@ function diligenciar(d, via) {
 }
 
 function recalcular() {
-  var b = +$("#fBase").value || 0, i = +$("#fIva").value || 0, o = +$("#fOtros").value || 0;
-  var t = +$("#fTotal").value || 0, dif = t - (b + i + o);
+  var b = aNumero($("#fBase").value), i = aNumero($("#fIva").value),
+      o = aNumero($("#fOtros").value), t = aNumero($("#fTotal").value);
+  var dif = t - (b + i + o);
   $("#calc").textContent = M.pesos(b + i + o);
   var av = $("#avisoDif");
   if (t > 0 && Math.abs(dif) > 0) {
@@ -2548,10 +2637,10 @@ function guardarGasto(enviar) {
     CodigoConcepto: $("#fConcepto").value,
     Descripcion: $("#fDesc").value.trim(),
     CentroCosto: $("#fCentro").value,
-    ValorBase: +$("#fBase").value || 0,
-    IVA: +$("#fIva").value || 0,
-    OtrosNoDescontables: +$("#fOtros").value || 0,
-    ValorTotalSoporte: +$("#fTotal").value || 0,
+    ValorBase: aNumero($("#fBase").value),
+    IVA: aNumero($("#fIva").value),
+    OtrosNoDescontables: aNumero($("#fOtros").value),
+    ValorTotalSoporte: aNumero($("#fTotal").value),
     SinSoporteFormal: $("#fSinSoporte").checked
   };
   var c = M.concepto(f.CodigoConcepto);
@@ -2920,6 +3009,7 @@ function arrancar() {
   $("#inFoto").onchange = function () { Array.from(this.files).forEach(entraArchivo); this.value = ""; };
   $("#inArchivo").onchange = function () { Array.from(this.files).forEach(entraArchivo); this.value = ""; };
   ["fBase","fIva","fOtros","fTotal"].forEach(function (id) { $("#" + id).oninput = recalcular; });
+  activarMoneda();
   $("#fNit").oninput = function () {
     if ($("#fProveedor").value.trim()) return;
     var p = window.MTALECTOR.proveedorDe(this.value);
