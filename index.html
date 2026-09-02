@@ -1140,7 +1140,9 @@ function aISO(v) {
 function nitEmisor(txt) {
   var vistos = [], m;
   /* Con separadores de miles, como lo imprime una tirilla: 830.081.427-9 */
-  var reP = /\bN\.?\s?[I1l]\.?\s?T\.?\s*:?\s*(\d{1,3}[.\s]\d{3}[.\s]\d{3})\s*[-–]?\s*\d?/gi;
+  /* El OCR destroza el rótulo: «N.I.T.» llega como «N.1.T», «NlT», «N,I,T»,
+     «N I T». Se tolera cualquier separador entre las tres letras. */
+  var reP = /\bN[.,\s]?[I1l|][.,\s]?T[.,\s]*:?\s*(\d{1,3}[.,\s]\d{3}[.,\s]\d{3})\s*[-–]?\s*\d?/gi;
   while ((m = reP.exec(txt)) !== null) {
     var np = m[1].replace(/[.\s]/g, "");
     if (np === NIT_PROPIO) continue;
@@ -1148,7 +1150,7 @@ function nitEmisor(txt) {
     if (TECNOLOGICOS.test(alr)) continue;
     if (vistos.indexOf(np) < 0) vistos.push(np);
   }
-  var re = /\bN\.?\s?[I1l]\.?\s?T\.?\s*:?\s*(\d{6,10})\s*[-–]?\s*(\d)?/gi;
+  var re = /\bN[.,\s]?[I1l|][.,\s]?T[.,\s]*:?\s*(\d{6,10})\s*[-–]?\s*(\d)?/gi;
   while ((m = re.exec(txt)) !== null) {
     var n = m[1];
     if (n === NIT_PROPIO) continue;                       /* es MTA */
@@ -1156,6 +1158,20 @@ function nitEmisor(txt) {
     if (TECNOLOGICOS.test(alrededor)) continue;           /* el del software */
     if (vistos.indexOf(n) < 0) vistos.push(n);
   }
+  /* Sin rótulo legible: un número escrito como 830.081.427 es casi con certeza
+     un NIT. Ningún otro dato de una factura usa ese formato. */
+  if (!vistos.length) {
+    var reF = /\b(\d{3}[.,\s]\d{3}[.,\s]\d{3})\s*[-–]?\s*\d?\b/g, mf;
+    while ((mf = reF.exec(txt)) !== null) {
+      var nf = mf[1].replace(/[.,\s]/g, "");
+      if (nf === NIT_PROPIO || nf.length !== 9) continue;
+      if (!/^[89]/.test(nf)) continue;
+      var al = txt.substring(Math.max(0, mf.index - 90), mf.index + 90);
+      if (TECNOLOGICOS.test(al)) continue;
+      if (vistos.indexOf(nf) < 0) vistos.push(nf);
+    }
+  }
+
   /* Sin rótulo NIT: un número de nueve dígitos que empiece en 8 o 9, que es
      el rango de los NIT de empresa. Los de diez dígitos se descartan: en
      Colombia un teléfono fijo también los tiene, y sale en toda factura. */
@@ -1194,10 +1210,26 @@ function normalizarSufijo(v) {
   return base + " " + (mapa[suf] || suf);
 }
 
+/* Un renglón de la lista de productos parece una razón social cuando el OCR
+   trunca la última palabra: «1 UN PK CITRUS SALMON 54.000» quedó como
+   «UN PK CITRUS SA» y el «SA» se confundió con el sufijo societario. */
+function esRenglonProducto(v) {
+  if (/\d[.,]\d{2}\s*$/.test(v)) return true;              /* termina en importe */
+  if (/\b\d{1,3}[.,]\d{3}\b/.test(v)) return true;         /* contiene un importe */
+  if (/^\s*\d{1,3}\s+\d*\s*UN\b/i.test(v)) return true;   /* «1 1 UN …» */
+  if (/\b\d+\s*(UN|UND|UNID|KG|GR|LT|ML|PZA|CJ|BT)\b/i.test(v)) return true;
+  if (/^\s*\d{1,3}\s/.test(v) && /\d{3}/.test(v)) return true;
+  return false;
+}
+
 function candidatoValido(v) {
   if (!v) return false;
   var letras = v.replace(/[^A-ZÁÉÍÓÚÑ]/gi, "").length;
   if (letras < 4) return false;
+  if (esRenglonProducto(v)) return false;
+  /* Empezar con una unidad de medida delata un renglón de la lista de
+     productos, aunque el OCR le haya comido el importe. */
+  if (/^\s*(UN|UND|UNID|PK|CJ|BT|KG|GR|LT|ML|PZA|DOC)\b/i.test(v)) return false;
   if (/MU[NÑ]OZ TAMAYO|ASOCIADOS ABOGADOS/i.test(v)) return false;
   if (TECNOLOGICOS.test(v)) return false;
   if (/(NIT|CUFE|FACTURA|RESPONSABLE|AGENTE|R[EÉ]GIMEN|REGIMEN|ACTIVIDAD|CONTRIBUYENTE|COMUN|BOGOTA|RES\.|AUTORIZACION|NUMERACION|VIGENCIA|CLIENTE|VENDEDOR|CAJERO|MESA|CUBIERTOS|CONDICION|DIRECCION|TELEFONO|ELABORADO|SOFTWARE|FABRICANTE|PROVEEDOR TECNOLOGICO|ESTIMADO|TOTAL|DETALLE|IMPUESTO)/i.test(v)) return false;
@@ -1227,7 +1259,15 @@ function emisor(txt, nit) {
   for (var i = 0; i < lineas.length; i++) {
     var L = lineas[i];
     if (!candidatoValido(L)) continue;
-    if (SUFIJO.test(L)) { cands.push([normalizarSufijo(L), 80 - i]); continue; }
+    if (SUFIJO.test(L)) {
+      var previo = L.replace(SUFIJO, "").replace(/[\s.,\-]+$/, "");
+      /* «UN PK CITRUS SA» tiene sufijo pero su primera palabra es una unidad
+         de medida: no es una razón social. */
+      if (/^\s*(UN|UND|UNID|PK|CJ|BT|KG|GR|LT|ML)\b/i.test(previo)) continue;
+      if (previo.replace(/[^A-ZÁÉÍÓÚÑ]/gi, "").length < 4) continue;
+      cands.push([normalizarSufijo(L), 80 - i]);
+      continue;
+    }
     if (SUFIJO_ROTO.test(L)) {
       /* Se recorta el residuo ilegible y se deja el nombre. Es preferible
          entregar «TAKAMI» a entregar el nombre del local. */
