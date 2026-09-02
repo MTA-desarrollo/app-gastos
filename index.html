@@ -88,6 +88,10 @@ input:disabled{opacity:.5}
 label.f{display:block;margin-bottom:9px}
 label.f > span{display:block;font-size:12px;color:var(--slate);margin-bottom:5px;font-weight:500}
 .auto{background:var(--brass-soft)!important;border-color:var(--brass)!important;color:var(--ink)}
+/* Los campos leídos por OCR se marcan distinto: el OCR interpreta píxeles y
+   puede equivocarse en un dígito. El usuario debe verificarlos. */
+.auto-ocr{background:var(--warn-bg)!important;border-color:var(--warn)!important;color:var(--ink)}
+.avisoocr{margin-top:11px}
 .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate)}
 .chk input{width:auto}
 .hint{font-size:11.5px;color:var(--faint);margin:-4px 0 9px}
@@ -420,7 +424,11 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
     </div>
     <input type="file" id="inFoto" accept="image/*" capture="environment" multiple hidden>
     <input type="file" id="inArchivo" accept="application/pdf,image/*,.xml,text/xml" multiple hidden>
-    <div id="leyendo" hidden><span class="spin"></span> Leyendo el soporte…</div>
+    <div id="leyendo" hidden><span class="spin"></span><span>Leyendo el soporte…</span></div>
+    <div class="aviso avisoocr" id="avisoOCR" hidden>
+      Los datos se leyeron del <b>texto de la imagen</b>, no de un código QR.
+      Revise los valores antes de enviar.
+    </div>
     <div id="listaFiles"></div>
     <p class="vacio" id="sinFiles">Todo gasto exige al menos una foto o un archivo.</p>
   </div>
@@ -706,8 +714,15 @@ async function datosDePDF(file){
     if(/(BT|Tj|TJ)/.test(s)) texto += " " + cadenasPDF(s);
   }
   textoCrudo = texto;
+  /* 1a. formato del QR de la DIAN, si el PDF lo trae como texto */
   var d = analizarTexto(texto);
   if(hayDatos(d)) return {datos:d, via:"texto", texto:texto};
+  /* 1b. representación gráfica: rótulos en español. Es la ruta que resuelve
+     las facturas electrónicas que llegan por correo en PDF. */
+  if(window.MTAREPRE){
+    var dr = window.MTAREPRE.deRepresentacion(texto);
+    if(dr) return {datos:dr, via:"pdf", texto:texto};
+  }
   /* 2. imágenes incrustadas */
   for(var k=0;k<trozos.length;k++){
     var t = trozos[k];
@@ -762,9 +777,18 @@ async function leerSoporte(file){
       if(dx) return {datos:dx, via:"xml"};
       return null;
     }
-    if(file.type.indexOf("image") === 0){
+    if(file.type.indexOf("image") === 0 || /\.(jpe?g|png|gif|webp|bmp|heic|heif|tiff?)$/i.test(file.name||"")){
+      /* 1. el QR es exacto: se intenta primero */
       var t = await qrDesdeBlob(file);
       if(t){ var d = analizarTexto(t); if(hayDatos(d)) return {datos:d, via:"qr"}; }
+      /* 2. sin QR legible, se lee el papel con OCR */
+      if(window.MTAOCR && window.MTAREPRE){
+        var r = await window.MTAOCR.reconocer(file, window.MTAAVISO || null);
+        if(r && r.texto){
+          var dr = window.MTAREPRE.deRepresentacion(r.texto);
+          if(dr) return {datos:dr, via:"ocr", texto:r.texto, confianza:r.confianza};
+        }
+      }
       return null;
     }
     if(file.type === "application/pdf" || /\.pdf$/i.test(file.name)){
@@ -994,6 +1018,510 @@ window.MTALECTOR = {
   recordar: recordar,
   memoria: memoria
 };
+})();
+</script>
+<script>/* =========================================================================
+   MTA · Analizador de la representación gráfica
+   =========================================================================
+   El QR trae los campos en formato "NumFac: valor". La representación
+   gráfica del PDF —lo que el proveedor imprime— usa rótulos en español:
+   «Factura Electronica de Venta No.», «Subtotal:», «IVA(19%)», «Total».
+
+   Este módulo lee ese formato. Es la ruta que resuelve las facturas
+   electrónicas que llegan por correo en PDF, que son la mayoría.
+   ========================================================================= */
+(function () {
+"use strict";
+
+/* NIT de la firma. Sirve para NO confundir al adquirente con el emisor:
+   ambos aparecen en el documento. */
+var NIT_PROPIO = "830034264";
+
+/* Proveedores tecnológicos que aparecen al pie y no son el emisor */
+var TECNOLOGICOS = /CENET|misfacturas|Carvajal|Facture|Siesa|Alegra|Siigo|World Office|Olimpia|Certicamara|eFactura|Gosocket|Facturatech|Datico|Cadena|Delcop/i;
+
+/* Los importes llegan en cualquiera de estos formatos:
+     4,193,523      587.920,00      498,240.74      4193523
+   La regla que los distingue: un separador seguido de EXACTAMENTE uno o dos
+   dígitos al final es decimal; si van tres, es separador de miles. */
+function limpiarNumero(v) {
+  if (v == null) return null;
+  var s = String(v).replace(/[^\d.,-]/g, "").replace(/[.,]+$/, "");
+  if (!s) return null;
+  var m = s.match(/^(.*)([.,])(\d{1,2})$/);
+  if (m) {
+    s = m[1].replace(/[.,]/g, "") + "." + m[3];      /* el último es decimal */
+  } else {
+    s = s.replace(/[.,]/g, "");                       /* todos son miles */
+  }
+  var n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+function buscar(txt, patrones) {
+  for (var i = 0; i < patrones.length; i++) {
+    var m = txt.match(patrones[i]);
+    if (m && m[1] != null && String(m[1]).trim()) return String(m[1]).trim();
+  }
+  return "";
+}
+
+/* ---------- fecha ---------- */
+var MESES = {enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,
+             septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
+
+function aISO(v) {
+  if (!v) return "";
+  var s = String(v).trim();
+  var m = s.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (m) return m[1] + "-" + ("0"+m[2]).slice(-2) + "-" + ("0"+m[3]).slice(-2);
+  m = s.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (m) return m[3] + "-" + ("0"+m[2]).slice(-2) + "-" + ("0"+m[1]).slice(-2);
+  m = s.match(/(\d{1,2})\s*(?:de)?\s*([a-záéíóú]+)\s*(?:de)?\s*(\d{4})/i);
+  if (m && MESES[m[2].toLowerCase()]) {
+    return m[3] + "-" + ("0"+MESES[m[2].toLowerCase()]).slice(-2) + "-" + ("0"+m[1]).slice(-2);
+  }
+  return "";
+}
+
+/* ---------- NIT del emisor ---------- */
+/* En el documento hay varios NIT: el emisor, el adquirente y el proveedor
+   tecnológico. Se descartan los dos últimos y se toma el que quede. */
+function nitEmisor(txt) {
+  var vistos = [], m;
+  /* Con separadores de miles, como lo imprime una tirilla: 830.081.427-9 */
+  var reP = /\bN\.?\s?[I1l]\.?\s?T\.?\s*:?\s*(\d{1,3}[.\s]\d{3}[.\s]\d{3})\s*[-–]?\s*\d?/gi;
+  while ((m = reP.exec(txt)) !== null) {
+    var np = m[1].replace(/[.\s]/g, "");
+    if (np === NIT_PROPIO) continue;
+    var alr = txt.substring(Math.max(0, m.index - 90), m.index + 90);
+    if (TECNOLOGICOS.test(alr)) continue;
+    if (vistos.indexOf(np) < 0) vistos.push(np);
+  }
+  var re = /\bN\.?\s?[I1l]\.?\s?T\.?\s*:?\s*(\d{6,10})\s*[-–]?\s*(\d)?/gi;
+  while ((m = re.exec(txt)) !== null) {
+    var n = m[1];
+    if (n === NIT_PROPIO) continue;                       /* es MTA */
+    var alrededor = txt.substring(Math.max(0, m.index - 90), m.index + 90);
+    if (TECNOLOGICOS.test(alrededor)) continue;           /* el del software */
+    if (vistos.indexOf(n) < 0) vistos.push(n);
+  }
+  /* Sin rótulo NIT: un número suelto de 9 o 10 dígitos que no sea el propio */
+  if (!vistos.length) {
+    var re2 = /\b(8\d{8}|9\d{8}|\d{10})\b/g;
+    while ((m = re2.exec(txt)) !== null) {
+      if (m[1] !== NIT_PROPIO && vistos.indexOf(m[1]) < 0) vistos.push(m[1]);
+    }
+  }
+  return vistos[0] || "";
+}
+
+/* ---------- razón social del emisor ---------- */
+function emisor(txt, nit) {
+  if (nit) {
+    /* El nombre suele estar pegado al NIT del emisor, antes o después */
+    var n = String(nit).replace(/\D/g, "");
+    var i = txt.indexOf(n);
+    if (i >= 0) {
+      var zona = txt.substring(Math.max(0, i - 130), Math.min(txt.length, i + 190));
+      var m = zona.match(/([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9&.,\- ]{5,70}?(?:S\.?A\.?S|S\.?A\.?|LTDA|LIMITADA|E\.?U|S\.? EN C|Y CIA|CIA)\.?)/);
+      if (m) {
+        var v = m[1].replace(/\s+/g, " ").trim();
+        if (!TECNOLOGICOS.test(v) && !/MU[NÑ]OZ TAMAYO/i.test(v)) return v;
+      }
+    }
+  }
+  /* Tirilla POS: el nombre comercial va arriba, solo y en mayúsculas */
+  var lineas = String(txt).split(/[\n\r]+/).slice(0, 14);
+  for (var L = 0; L < lineas.length; L++) {
+    var ln = lineas[L].replace(/\s+/g, " ").trim();
+    if (ln.length < 4 || ln.length > 42) continue;
+    if (!/^[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9&.,'\- ]{3,}$/.test(ln)) continue;
+    if (/MU[NÑ]OZ TAMAYO|NIT|N\.I\.T|REGIMEN|R[EÉ]GIMEN|GRANDES|BOGOTA RES|FACTURA|RES\.|CONTRIBUYENTES|AUTORIZACION|TOTAL|CAJERO|VENDEDOR|CLIENTE|MESA|DIRECCION|TELEFONO/i.test(ln)) continue;
+    if (TECNOLOGICOS.test(ln)) continue;
+    if (/^\d/.test(ln)) continue;
+    return ln;
+  }
+
+  /* Cualquier forma societaria que no sea MTA ni un proveedor tecnológico */
+  var re = /([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9&.,\- ]{5,70}?(?:S\.?A\.?S|S\.?A\.?|LTDA|LIMITADA|E\.?U|S\.? EN C)\.?)/g, m2;
+  while ((m2 = re.exec(txt)) !== null) {
+    var c = m2[1].replace(/\s+/g, " ").trim();
+    if (/MU[NÑ]OZ TAMAYO|ASOCIADOS ABOGADOS/i.test(c)) continue;
+    if (TECNOLOGICOS.test(c)) continue;
+    if (/(NIT|CUFE|FACTURA|RESPONSABLE|AGENTE|R[EÉ]GIMEN|REGIMEN|ACTIVIDAD|CONTRIBUYENTE|COMUN|BOGOTA|RES\.|AUTORIZACION|NUMERACION|VIGENCIA|CLIENTE|VENDEDOR|CAJERO)/i.test(c)) continue;
+    /* Al menos dos palabras con letras antes de la forma societaria: descarta
+       fragmentos como «C. 5611 SA» que el OCR produce al partir un rótulo. */
+    var previo = c.replace(/\s*(S\.?A\.?S|S\.?A\.?|LTDA|LIMITADA|E\.?U|S\.? EN C)\.?$/i, "").trim();
+    if (previo.replace(/[^A-ZÁÉÍÓÚÑ]/gi, "").length < 5) continue;
+    if (/^\d/.test(previo)) continue;
+    return c;
+  }
+  return "";
+}
+
+/* ---------- punto de entrada ---------- */
+function deRepresentacion(txt) {
+  if (!txt || txt.length < 60) return null;
+  var t = String(txt).replace(/\s+/g, " ");
+  var d = {};
+
+  d.numfac = buscar(t, [
+    /Factura\s+Electr[oó]nica\s+de\s+Venta\s*:?\s*([A-Z]{2,6}[-\s]?\d{3,12})/i,
+    /Factura\s+Electr[oó]nica\s+de\s+Venta\s+No\.?\s*:?\s*([A-Z0-9\-]{2,25})/i,
+    /Factura\s+de\s+Venta\s+No\.?\s*:?\s*([A-Z0-9\-]{2,25})/i,
+    /(?:N[uú]mero|No\.?|N°)\s*(?:de)?\s*factura\s*:?\s*([A-Z0-9\-]{2,25})/i,
+    /Factura\s*(?:No\.?|N°|#)\s*:?\s*([A-Z0-9\-]{2,25})/i,
+    /Documento\s+equivalente\s+No\.?\s*:?\s*([A-Z0-9\-]{2,25})/i
+  ]);
+
+  d.fecfac = aISO(buscar(t, [
+    /Fecha\s+de\s+emisi[oó]n\s*:?\s*([\d]{1,4}[-/][\d]{1,2}[-/][\d]{2,4})/i,
+    /Fecha\s*[—–\-_]{0,3}\s*:?\s*(\d{4}[/-]\d{1,2}[/-]\d{1,2})/i,
+    /Fecha\s*[—–\-_]{0,3}\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{4})/i,
+    /Fecha\s+de\s+expedici[oó]n\s*:?\s*([\d]{1,4}[-/][\d]{1,2}[-/][\d]{2,4})/i,
+    /Fecha\s+factura\s*:?\s*([\d]{1,4}[-/][\d]{1,2}[-/][\d]{2,4})/i,
+    /Fecha\s*:?\s*([\d]{1,4}[-/][\d]{1,2}[-/][\d]{2,4})/i,
+    /Fecha\s+de\s+emisi[oó]n\s*:?\s*(\d{1,2}\s*de\s*[a-záéíóú]+\s*de\s*\d{4})/i
+  ]));
+
+  d.nitfac = nitEmisor(t);
+  d.proveedor = emisor(t, d.nitfac);
+
+  /* IMP exige una cifra con separador o de cuatro dígitos. Sin eso, un
+     «IVA(19%) 11%» de la tabla de ítems se confunde con el valor del IVA. */
+  var IMP = "((?:\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d{1,2})?)|\\d{4,}(?:[.,]\\d{1,2})?)";
+  function rx(pre) { return new RegExp(pre + "\\s*" + IMP, "i"); }
+
+  var base = buscar(t, [
+    rx("Subtotal\\s*:?\\s*(?:COP|\\$)?"),
+    rx("Base\\s+gravable\\s*:?\\s*(?:COP|\\$)?"),
+    rx("Valor\\s+bruto\\s*:?\\s*(?:COP|\\$)?"),
+    rx("Vta\\s+Gravada[^\\d]{0,12}"),
+    rx("Total\\s+bruto\\s*:?\\s*(?:COP|\\$)?")
+  ]);
+  var iva = buscar(t, [
+    rx("IVA\\s*\\(\\s*\\d+(?:[.,]\\d+)?\\s*%?\\s*\\)\\s*:?\\s*(?:COP|\\$)"),
+    rx("Total\\s+IVA\\s*:?\\s*(?:COP|\\$)?"),
+    rx("IVA\\s*\\(?\\s*\\d*\\s*%?\\s*\\)?\\s*:?\\s*(?:COP|\\$)?")
+  ]);
+  var total = buscar(t, [
+    rx("Total\\s+a\\s+pagar\\s*:?\\s*(?:COP|\\$)?"),
+    rx("Total\\s+factura\\s*:?\\s*(?:COP|\\$)?"),
+    rx("\\bTotal\\s*:?\\s*(?:COP|\\$)\\s*"),
+    rx("\\bTOTAL\\s*\\.{0,20}\\s*\\$?\\s*"),
+    rx("Valor\\s+total\\s*:?\\s*(?:COP|\\$)")
+  ]);
+  /* En la tirilla la línea de ICO trae DOS cifras: base e impuesto. El que
+     interesa es el segundo. */
+  /* «ICO 8% SERVICIOS  498.240,74  39.859,26». El OCR degrada el «8%» a
+     «E%», así que el patrón tolera ambos. */
+  var mICO = t.match(new RegExp("(?:ICO|IC0|INC)\\s*\\d{0,2}\\s*[%E]?[^\\d]{0,20}" +
+                                IMP + "[^\\d]{0,12}" + IMP, "i"));
+  var otros = mICO ? mICO[2] : buscar(t, [
+    rx("(?:ICO|INC|IC0|Impoconsumo|Imp\\.?\\s*consumo)\\s*\\d*\\s*[%E]?[^\\d]{0,22}"),
+    rx("Impuestos?\\s*\\.{0,20}\\s*")
+  ]);
+
+  /* ---------- tirilla POS ----------
+     La representación de un punto de venta usa otros rótulos: «TOTAL
+     PRODUCTOS», «Vta Gravada», «TOTAL» a secas. Y el OCR degrada los
+     nombres, así que los patrones toleran ruido. */
+  if (!base) {
+    base = buscar(t, [
+      rx("Vta\\s+\\w{6,9}\\s*\\(?\\w{0,3}\\)?\\s*\\.{0,20}\\s*"),
+      rx("(?:Sub\\s*)?total\\s+productos?\\s*\\.{0,20}\\s*\\$?\\s*"),
+      rx("Base\\s+gravable\\s*\\.{0,20}\\s*")
+    ]);
+  }
+  if (!total) {
+    total = buscar(t, [
+      rx("\\bTOTAL\\s+(?!PRODUCTOS|ITEMS)\\.{0,20}\\s*\\$?\\s*"),
+      rx("\\bTOTAL\\s*\\.{2,}\\s*\\$?\\s*"),
+      rx("Valor\\s+a\\s+pagar\\s*\\.{0,20}\\s*")
+    ]);
+  }
+
+  var nb = limpiarNumero(base), ni = limpiarNumero(iva),
+      nt = limpiarNumero(total), no = limpiarNumero(otros);
+
+  /* Si el "Total" capturado es menor que la base, se tomó una cifra
+     equivocada. Se reconstruye. */
+  /* Un total menor que la base es una cifra mal capturada */
+  if (nb && nt && nt < nb) nt = null;
+  if (!nt && nb) nt = nb + (ni || 0) + (no || 0);
+  /* Coherencia: si el total no cuadra ni de lejos con base+IVA, se descarta
+     el IVA antes que el total, que es el dato que el usuario verifica. */
+  if (nb && ni && nt && Math.abs(nt - (nb + ni + (no || 0))) > Math.max(2000, nt * 0.02)) {
+    if (Math.abs(nt - nb) < 2) ni = null;
+  }
+
+  if (nb) d.valfac = String(nb);
+  if (ni) d.valiva = String(ni);
+  if (no) d.valotroim = String(no);
+  if (nt) d.valtolfac = String(nt);
+
+  var cufe = t.match(/CUFE\s*:?\s*([a-f0-9]{90,100})/i) ||
+             t.match(/CUDE\s*:?\s*([a-f0-9]{90,100})/i) ||
+             t.match(/\b([a-f0-9]{96})\b/i);
+  if (cufe) d.cufe = cufe[1];
+
+  var utiles = ["numfac","fecfac","nitfac","valfac","valiva","valtolfac","cufe"]
+                 .filter(function (k) { return d[k]; }).length;
+  return utiles >= 2 ? d : null;
+}
+
+window.MTAREPRE = { deRepresentacion: deRepresentacion, limpiarNumero: limpiarNumero, aISO: aISO };
+})();
+</script>
+<script>/* =========================================================================
+   MTA · OCR de facturas sin QR ni texto
+   =========================================================================
+   Cuarta ruta del lector, para escaneos y fotos de tirillas POS. Corre
+   íntegramente en el dispositivo con Tesseract.js: no envía la imagen a
+   ningún servidor, no consume créditos y no agrega conectores.
+
+   Dos piezas hacen la diferencia entre leer y no leer:
+
+   1. El PREPROCESAMIENTO. Una foto de un recibo trae sombra, papel térmico
+      desvaído y perspectiva. Dividir la imagen por su propio fondo
+      desenfocado normaliza la iluminación y sube el acierto de forma
+      notoria. Medido: de 3 a 5 de 7 señales en la prueba con el recibo real.
+
+   2. La NORMALIZACIÓN del texto. El OCR devuelve «587, 920,00» con espacios
+      dentro del número. Sin limpiarlo, ningún patrón encuentra el total.
+   ========================================================================= */
+(function () {
+"use strict";
+
+var CDN = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+var cargando = null, motor = null;
+
+/* ---------------------------------------------------------- carga diferida */
+function cargarTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (cargando) return cargando;
+  cargando = new Promise(function (res, rej) {
+    var s = document.createElement("script");
+    s.src = CDN;
+    s.onload = function () { res(window.Tesseract); };
+    s.onerror = function () { rej(new Error("sin conexión para cargar el OCR")); };
+    document.head.appendChild(s);
+  });
+  return cargando;
+}
+
+async function obtenerMotor(avisar) {
+  if (motor) return motor;
+  if (avisar) avisar("Preparando el lector de texto…");
+  var T = await cargarTesseract();
+  motor = await T.createWorker("spa", 1, {
+    logger: function (m) {
+      if (avisar && m.status === "recognizing text") {
+        avisar("Leyendo el documento… " + Math.round((m.progress || 0) * 100) + " %");
+      }
+    }
+  });
+  return motor;
+}
+
+/* ------------------------------------------------------- preprocesamiento */
+/* Divide la imagen por su fondo desenfocado. Es lo que quita la sombra de una
+   foto tomada a mano y rescata el papel térmico desvaído. */
+function corregirIluminacion(cv) {
+  var ctx = cv.getContext("2d", { willReadFrequently: true });
+  var w = cv.width, h = cv.height;
+  var img = ctx.getImageData(0, 0, w, h), d = img.data;
+
+  /* gris */
+  var gris = new Float32Array(w * h);
+  for (var i = 0, p = 0; i < d.length; i += 4, p++) {
+    gris[p] = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+  }
+
+  /* fondo por caja móvil, dos pasadas separables — equivale a un desenfoque
+     grande sin el coste de un gaussiano real */
+  var r = Math.max(8, Math.round(Math.max(w, h) / 28));
+  var tmp = new Float32Array(w * h), fondo = new Float32Array(w * h);
+  var x, y, k, suma, n;
+  for (y = 0; y < h; y++) {
+    suma = 0; n = 0;
+    for (k = 0; k <= r && k < w; k++) { suma += gris[y * w + k]; n++; }
+    for (x = 0; x < w; x++) {
+      tmp[y * w + x] = suma / n;
+      if (x - r >= 0) { suma -= gris[y * w + x - r]; n--; }
+      if (x + r + 1 < w) { suma += gris[y * w + x + r + 1]; n++; }
+    }
+  }
+  for (x = 0; x < w; x++) {
+    suma = 0; n = 0;
+    for (k = 0; k <= r && k < h; k++) { suma += tmp[k * w + x]; n++; }
+    for (y = 0; y < h; y++) {
+      fondo[y * w + x] = suma / n;
+      if (y - r >= 0) { suma -= tmp[(y - r) * w + x]; n--; }
+      if (y + r + 1 < h) { suma += tmp[(y + r + 1) * w + x]; n++; }
+    }
+  }
+
+  /* división + autocontraste sobre el histograma resultante */
+  var vals = new Uint8ClampedArray(w * h);
+  for (p = 0; p < w * h; p++) {
+    vals[p] = Math.max(0, Math.min(255, (gris[p] / Math.max(fondo[p], 1)) * 190));
+  }
+  var hist = new Uint32Array(256);
+  for (p = 0; p < vals.length; p++) hist[vals[p]]++;
+  var corte = Math.round(vals.length * 0.01), acum = 0, lo = 0, hi = 255;
+  for (k = 0; k < 256; k++) { acum += hist[k]; if (acum > corte) { lo = k; break; } }
+  acum = 0;
+  for (k = 255; k >= 0; k--) { acum += hist[k]; if (acum > corte) { hi = k; break; } }
+  var rango = Math.max(1, hi - lo);
+
+  for (p = 0, i = 0; p < w * h; p++, i += 4) {
+    var v = Math.max(0, Math.min(255, ((vals[p] - lo) / rango) * 255));
+    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+}
+
+/* Tesseract acierta más con el texto entre 20 y 30 px de alto. Para un
+   recibo eso significa llevar el lado mayor a unos 2400 px. */
+async function prepararImagen(blob, lado) {
+  var bmp = await createImageBitmap(blob);
+  var e = Math.min(3, (lado || 2400) / Math.max(bmp.width, bmp.height));
+  var w = Math.round(bmp.width * e), h = Math.round(bmp.height * e);
+  var cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  var ctx = cv.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingQuality = "high";
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(bmp, 0, 0, w, h);
+  if (bmp.close) bmp.close();
+  return corregirIluminacion(cv);
+}
+
+/* ------------------------------------------------------- normalización */
+/* El OCR devuelve «587, 920,00», «29, 200..00», «830. 081. 427-9». Sin
+   juntar esos dígitos, ningún patrón de importe encuentra nada. */
+function normalizar(txt) {
+  if (!txt) return "";
+  var t = String(txt);
+  t = t.replace(/[|¡!]/g, " ");
+  t = t.replace(/[“”„]/g, '"').replace(/[‘’]/g, "'");
+  /* dígitos separados por espacios dentro de un número: 587, 920,00 */
+  for (var i = 0; i < 4; i++) {
+    t = t.replace(/(\d)\s*([.,])\s*(\d)/g, "$1$2$3");
+    t = t.replace(/(\d)\s+(\d{3}\b)/g, "$1 $2");
+  }
+  /* puntos duplicados por ruido: 29,200..00 */
+  t = t.replace(/([.,]){2,}/g, "$1");
+  /* separadores de miles con espacio: 830. 081. 427 */
+  t = t.replace(/(\d{1,3})\.\s(\d{3})/g, "$1.$2");
+  /* confusiones dentro de números */
+  t = t.replace(/(\d)[Oo](\d)/g, "$10$2").replace(/(\d)[lI](\d)/g, "$11$2");
+  t = t.replace(/\s{2,}/g, " ");
+  return t;
+}
+
+/* ----------------------------------------------------------- reconocer */
+async function reconocer(blob, avisar) {
+  var w = await obtenerMotor(avisar);
+  var cv = await prepararImagen(blob, 2400);
+  var r = await w.recognize(cv);
+  var texto = normalizar(r.data.text || "");
+  var conf = r.data.confidence || 0;
+
+  /* Si salió poco texto o poca confianza, se reintenta a más resolución.
+     Una tirilla fotografiada de lejos lo necesita. */
+  if (texto.replace(/\s/g, "").length < 180 || conf < 55) {
+    var cv2 = await prepararImagen(blob, 3200);
+    var r2 = await w.recognize(cv2);
+    var t2 = normalizar(r2.data.text || "");
+    if (t2.replace(/\s/g, "").length > texto.replace(/\s/g, "").length) {
+      texto = t2; conf = r2.data.confidence || conf;
+    }
+  }
+  return { texto: texto, confianza: conf };
+}
+
+async function liberar() {
+  if (motor) { try { await motor.terminate(); } catch (e) {} motor = null; }
+}
+
+window.MTAOCR = {
+  reconocer: reconocer,
+  normalizar: normalizar,
+  prepararImagen: prepararImagen,
+  liberar: liberar,
+  disponible: function () { return typeof createImageBitmap === "function"; }
+};
+})();
+</script>
+<script>/* =========================================================================
+   MTA · Rasterizador de PDF escaneados
+   =========================================================================
+   Un PDF que sale de un escáner no tiene texto: es una sola imagen, casi
+   siempre comprimida con CCITTFaxDecode —el formato de los fax— o JBIG2.
+   El navegador no decodifica ninguno de los dos.
+
+   Este módulo carga pdf.js bajo demanda y convierte la primera página en
+   una imagen que el OCR sí puede leer. Solo se descarga cuando hace falta:
+   un PDF con texto nunca llega hasta aquí.
+   ========================================================================= */
+(function () {
+"use strict";
+
+var BASE = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/";
+var cargando = null;
+
+function cargar() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (cargando) return cargando;
+  cargando = new Promise(function (res, rej) {
+    var s = document.createElement("script");
+    s.src = BASE + "pdf.min.mjs";
+    s.type = "module";
+    s.onload = function () {
+      /* pdf.js 4 se expone como módulo; se importa dinámicamente */
+      import(BASE + "pdf.min.mjs").then(function (m) {
+        m.GlobalWorkerOptions.workerSrc = BASE + "pdf.worker.min.mjs";
+        window.pdfjsLib = m;
+        res(m);
+      }).catch(rej);
+    };
+    s.onerror = function () { rej(new Error("sin conexión para cargar el lector de PDF")); };
+    document.head.appendChild(s);
+  });
+  return cargando;
+}
+
+/* Devuelve un Blob PNG de la primera página, a la escala necesaria para que
+   el texto quede legible por el OCR. */
+async function rasterizar(bytes, avisar) {
+  if (avisar) avisar("Preparando el documento…");
+  var pdfjs = await cargar();
+  var doc = await pdfjs.getDocument({ data: bytes }).promise;
+  var pag = await doc.getPage(1);
+
+  /* Escala para llevar el lado mayor a unos 2400 px */
+  var v1 = pag.getViewport({ scale: 1 });
+  var e = Math.min(4, 2400 / Math.max(v1.width, v1.height));
+  var vp = pag.getViewport({ scale: e });
+
+  var cv = document.createElement("canvas");
+  cv.width = Math.round(vp.width);
+  cv.height = Math.round(vp.height);
+  var ctx = cv.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  await pag.render({ canvasContext: ctx, viewport: vp }).promise;
+
+  var blob = await new Promise(function (r) { cv.toBlob(r, "image/png"); });
+  try { doc.destroy(); } catch (e2) {}
+  return blob;
+}
+
+window.MTAPDF = { rasterizar: rasterizar };
 })();
 </script>
 <script>/* =========================================================================
@@ -1787,6 +2315,13 @@ var seleccion = [];
 function el(t, c, h) { var e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; }
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
+/* El OCR tarda varios segundos y descarga sus datos la primera vez. Sin
+   avisar el progreso, el usuario cree que la app se colgó. */
+window.MTAAVISO = function (texto) {
+  var e = document.getElementById("leyendo");
+  if (e) { e.hidden = false; e.querySelector("span:last-child").textContent = texto; }
+};
+
 function toast(msg, tipo) {
   var t = $("#toast");
   t.className = "toast " + (tipo || "ok") + " ver";
@@ -1905,6 +2440,7 @@ async function normalizar(file) {
 async function entraArchivo(file) {
   var av = $("#leyendo");
   av.hidden = false;
+  av.querySelector("span:last-child").textContent = "Leyendo el soporte…";
   var paraLeer = file, entrada = null;
 
   if (esImagen(file)) {
@@ -1947,7 +2483,15 @@ async function entraArchivo(file) {
 
 function diligenciar(d, via) {
   var n = 0;
-  function pon(id, v) { if (v != null && v !== "") { $(id).value = v; $(id).classList.add("auto"); n++; } }
+  var incierto = (via === "ocr");
+  function pon(id, v) {
+    if (v != null && v !== "") {
+      $(id).value = v;
+      $(id).classList.remove("auto", "auto-ocr");
+      $(id).classList.add(incierto ? "auto-ocr" : "auto");
+      n++;
+    }
+  }
   pon("#fNumero", d.numfac);
   if (d.fecfac) { pon("#fFecha", d.fecfac); }
   pon("#fNit", d.nitfac);
@@ -1959,8 +2503,10 @@ function diligenciar(d, via) {
   pon("#fProveedor", d.proveedor);
   if (d.cufe) { $("#fTipo").value = "Factura electrónica"; }
   recalcular();
-  var fuente = {xml:"del XML", texto:"del PDF", qr:"del código QR"}[via] || "del soporte";
-  toast("Leído " + fuente + ": " + n + " campos.", "ok");
+  var fuente = {xml:"del XML", texto:"del PDF", pdf:"del PDF",
+                qr:"del código QR", ocr:"del texto de la imagen"}[via] || "del soporte";
+  toast("Leído " + fuente + ": " + n + " campos.", incierto ? "warn" : "ok");
+  $("#avisoOCR").hidden = !incierto;
   if (!d.proveedor) {
     setTimeout(function () {
       toast("Falta el nombre del proveedor: escríbalo y la app lo recordará.", "warn");
@@ -2034,7 +2580,8 @@ function guardarGasto(enviar) {
 
 function limpiar() {
   ["fNumero","fNit","fProveedor","fBase","fIva","fOtros","fTotal","fCufe","fDesc"]
-    .forEach(function (id) { var e = $("#" + id); e.value = ""; e.classList.remove("auto"); });
+    .forEach(function (id) { var e = $("#" + id); e.value = ""; e.classList.remove("auto", "auto-ocr"); });
+  $("#avisoOCR").hidden = true;
   $("#fConcepto").value = ""; $("#fCentro").value = "";
   $("#fSinSoporte").checked = false;
   $("#fFecha").value = M.hoy();
