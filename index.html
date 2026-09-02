@@ -468,7 +468,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
     <p class="tit">Clasificación</p>
     <label class="f"><span>Concepto</span><select id="fConcepto"></select></label>
     <p class="hint" id="hintConcepto"></p>
-    <label class="f"><span>Centro de costo</span><select id="fCentro"></select></label>
+    <label class="f"><span>Destino</span><select id="fCentro"></select></label>
     <label class="f"><span>Descripción <b id="reqDesc" hidden style="color:var(--warn)">· obligatoria para este concepto</b></span>
       <textarea id="fDesc" rows="2"></textarea></label>
   </div>
@@ -796,6 +796,22 @@ async function datosDePDF(file){
       var d2 = analizarTexto(txt);
       if(hayDatos(d2)) return {datos:d2, via:"qr", texto:textoCrudo || txt};
     }
+  }
+
+  /* 3. PDF escaneado: ni texto ni QR legible. Se rasteriza la página con
+     pdf.js y se lee con OCR. Cubre CCITTFaxDecode y JBIG2, que el navegador
+     no decodifica por su cuenta. */
+  if(window.MTAPDF && window.MTAOCR && window.MTAREPRE){
+    try{
+      var png = await window.MTAPDF.rasterizar(buf, window.MTAAVISO || null);
+      if(png){
+        var ro = await window.MTAOCR.reconocer(png, window.MTAAVISO || null);
+        if(ro && ro.texto){
+          var dro = window.MTAREPRE.deRepresentacion(ro.texto);
+          if(dro) return {datos:dro, via:"ocr", texto:ro.texto, confianza:ro.confianza};
+        }
+      }
+    }catch(e){ }
   }
   return null;
 }
@@ -1502,46 +1518,53 @@ window.MTAOCR = {
    siempre comprimida con CCITTFaxDecode —el formato de los fax— o JBIG2.
    El navegador no decodifica ninguno de los dos.
 
-   Este módulo carga pdf.js bajo demanda y convierte la primera página en
-   una imagen que el OCR sí puede leer. Solo se descarga cuando hace falta:
-   un PDF con texto nunca llega hasta aquí.
+   Este módulo carga pdf.js bajo demanda y convierte la primera página en una
+   imagen que el OCR sí puede leer. Solo se descarga cuando hace falta: un PDF
+   con texto nunca llega hasta aquí.
+
+   Se usa la rama 3.x en su compilación «legacy», que expone pdfjsLib como
+   script normal. La 4.x solo publica módulos ES, y cargarlos con import()
+   dinámico falla en cuanto el navegador es un poco antiguo o la página se
+   sirve con una política de contenido estricta.
    ========================================================================= */
 (function () {
 "use strict";
 
-var BASE = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/";
+var BASE = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/";
 var cargando = null;
+
+function script(url) {
+  return new Promise(function (res, rej) {
+    var s = document.createElement("script");
+    s.src = url;
+    s.onload = res;
+    s.onerror = function () { rej(new Error("no se pudo cargar " + url)); };
+    document.head.appendChild(s);
+  });
+}
 
 function cargar() {
   if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
   if (cargando) return cargando;
-  cargando = new Promise(function (res, rej) {
-    var s = document.createElement("script");
-    s.src = BASE + "pdf.min.mjs";
-    s.type = "module";
-    s.onload = function () {
-      /* pdf.js 4 se expone como módulo; se importa dinámicamente */
-      import(BASE + "pdf.min.mjs").then(function (m) {
-        m.GlobalWorkerOptions.workerSrc = BASE + "pdf.worker.min.mjs";
-        window.pdfjsLib = m;
-        res(m);
-      }).catch(rej);
-    };
-    s.onerror = function () { rej(new Error("sin conexión para cargar el lector de PDF")); };
-    document.head.appendChild(s);
+  cargando = script(BASE + "pdf.min.js").then(function () {
+    if (!window.pdfjsLib) throw new Error("pdf.js no se expuso");
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = BASE + "pdf.worker.min.js";
+    return window.pdfjsLib;
   });
   return cargando;
 }
 
-/* Devuelve un Blob PNG de la primera página, a la escala necesaria para que
-   el texto quede legible por el OCR. */
+/* Devuelve un Blob PNG de la primera página, a la escala que el OCR necesita. */
 async function rasterizar(bytes, avisar) {
   if (avisar) avisar("Preparando el documento…");
   var pdfjs = await cargar();
-  var doc = await pdfjs.getDocument({ data: bytes }).promise;
+  var doc = await pdfjs.getDocument({
+    data: bytes,
+    disableFontFace: true,
+    isEvalSupported: false
+  }).promise;
   var pag = await doc.getPage(1);
 
-  /* Escala para llevar el lado mayor a unos 2400 px */
   var v1 = pag.getViewport({ scale: 1 });
   var e = Math.min(4, 2400 / Math.max(v1.width, v1.height));
   var vp = pag.getViewport({ scale: e });
@@ -1597,7 +1620,13 @@ var PARAMETROS = {
   CorreoAdministrador:"", UsarCampoProyecto:"No"
 };
 
-var CENTROS = ["Contabilidad","Jurídica / Litigios","Jurídica / Corporativo","Administración","Dirección"];
+/* Destino del gasto. Lo definió el usuario el 2 de septiembre de 2026 y
+   reemplaza a los centros de costo provisionales. */
+var CENTROS = [
+  "Gastos de Representación",
+  "Gastos para cargar al Cliente",
+  "Gastos directos para cargar a MTA"
+];
 var TIPOS_SOPORTE = ["Factura electrónica","Documento equivalente POS","Tiquete",
                      "Recibo del proveedor","Proveedor no obligado a facturar"];
 
@@ -2434,6 +2463,9 @@ function aplicarRol() {
 function ir(p) {
   var v = M.pantallasDe(M.usuario().Rol);
   if (v.indexOf(p) < 0) p = v[0];
+  /* Al volver a Home la pantalla queda limpia: los datos de la captura
+     anterior no deben mezclarse con el gasto nuevo. */
+  if (p === "home" && pantalla !== "home") { archivos = []; limpiar(); }
   pantalla = p;
   $$(".pane").forEach(function (x) { x.hidden = true; });
   $("#pane-" + p).hidden = false;
@@ -2514,6 +2546,10 @@ async function normalizar(file) {
 }
 
 async function entraArchivo(file) {
+  /* Un soporte nuevo reemplaza la lectura anterior. Sin esto, un archivo que
+     no se puede leer deja en pantalla los datos del anterior y parece que sí
+     se leyó. */
+  if (!archivos.length) limpiarLectura();
   var av = $("#leyendo");
   av.hidden = false;
   av.querySelector("span:last-child").textContent = "Leyendo el soporte…";
@@ -2649,7 +2685,7 @@ function guardarGasto(enviar) {
   var faltan = [];
   if (!f.FechaGasto) faltan.push("fecha");
   if (!f.CodigoConcepto) faltan.push("concepto");
-  if (!f.CentroCosto) faltan.push("centro de costo");
+  if (!f.CentroCosto) faltan.push("destino");
   if (!f.SinSoporteFormal && !f.NumeroDocumento) faltan.push("número del documento");
   if (!(f.ValorTotalSoporte > 0)) faltan.push("valor total");
   if (!archivos.length) faltan.push("al menos una foto o un archivo");
@@ -2665,6 +2701,15 @@ function guardarGasto(enviar) {
   limpiar();
   toast(g.Title + (enviar ? " enviado a aprobación." : " guardado en borrador."), "ok");
   ir("mis");
+}
+
+/* Vacía solo lo que proviene de la lectura del soporte. Concepto, destino y
+   descripción los escribe la persona, así que se conservan. */
+function limpiarLectura() {
+  ["fNumero","fNit","fProveedor","fBase","fIva","fOtros","fTotal","fCufe"]
+    .forEach(function (id) { var e = $("#" + id); e.value = ""; e.classList.remove("auto", "auto-ocr"); });
+  $("#avisoOCR").hidden = true;
+  recalcular();
 }
 
 function limpiar() {
