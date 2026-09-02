@@ -446,7 +446,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
       <label class="f"><span>NIT o cédula</span><input id="fNit" inputmode="numeric"></label>
       <label class="f"><span>Número del documento</span><input id="fNumero"></label>
     </div>
-    <label class="f"><span>Nombre del proveedor</span><input id="fProveedor" placeholder="Lo diligencia la app"></label>
+    <label class="f"><span>Nombre del proveedor / Razón social</span><input id="fProveedor" placeholder="Lo diligencia la app"></label>
     <label class="f"><span>CUFE</span><input id="fCufe" placeholder="Lo diligencia la app" class="num" style="font-size:11px"></label>
     <label class="chk"><input type="checkbox" id="fSinSoporte"> Sin soporte formal</label>
   </div>
@@ -1088,7 +1088,7 @@ window.MTALECTOR = {
 var NIT_PROPIO = "830034264";
 
 /* Proveedores tecnológicos que aparecen al pie y no son el emisor */
-var TECNOLOGICOS = /CENET|misfacturas|Carvajal|Facture|Siesa|Alegra|Siigo|World Office|Olimpia|Certicamara|eFactura|Gosocket|Facturatech|Datico|Cadena|Delcop/i;
+var TECNOLOGICOS = /CENET|misfacturas|Carvajal|Facture|Siesa|Alegra|Siigo|World Office|Olimpia|Certicamara|eFactura|Gosocket|Facturatech|Datico|Cadena|Delcop|SISTEMAS DE INFORMACI[OÓ]N|SOLUCIONES INFORM[AÁ]TICAS|E-?Invoic|SOFTWARE/i;
 
 /* Los importes llegan en cualquiera de estos formatos:
      4,193,523      587.920,00      498,240.74      4193523
@@ -1170,48 +1170,108 @@ function nitEmisor(txt) {
   return vistos[0] || "";
 }
 
-/* ---------- razón social del emisor ---------- */
+/* ---------- razón social del emisor ----------
+   El nombre del ESTABLECIMIENTO no es la razón social. En el recibo probado,
+   el establecimiento es «OSAKI ARTISAN» y la empresa es «TAKAMI S.A». Lo que
+   la contabilidad necesita es la segunda.
+
+   La marca que las distingue es el sufijo societario. Y el OCR lo degrada sin
+   piedad: «S.A» llegó como «$.». Por eso el patrón tolera que la S sea 5 o $,
+   la A sea 4, y que falte algún carácter. */
+
+/* Sufijo reconocible, incluso mal leído */
+var SUFIJO = /(?:^|[\s.,\-])((?:S\s*[.,]?\s*A\s*[.,]?\s*S)|(?:S\s*[.,]?\s*A)|SAS|SA|LTDA|LTOA|LIMITADA|E\s*[.,]?\s*U|S\s+EN\s+C|&?\s*C[IÍ]A)\s*[.,]?\s*$/i;
+/* Residuo de un sufijo que el OCR destrozó: «$.», «5.A», «S,», «$A» */
+var SUFIJO_ROTO = /(?:^|\s)[S5$§][\s.,]*[A4]?[\s.,]*[S5$]?[\s.,]*$/;
+
+function normalizarSufijo(v) {
+  var m = v.match(SUFIJO);
+  if (!m) return v;
+  var suf = m[1].replace(/[\s.,]/g, "").toUpperCase();
+  var base = v.substring(0, v.length - m[0].length).replace(/[\s.,\-]+$/, "");
+  var mapa = {SAS:"S.A.S", SA:"S.A", LTDA:"LTDA", LTOA:"LTDA", LIMITADA:"LTDA",
+              EU:"E.U", SENC:"S. en C.", CIA:"y Cía"};
+  return base + " " + (mapa[suf] || suf);
+}
+
+function candidatoValido(v) {
+  if (!v) return false;
+  var letras = v.replace(/[^A-ZÁÉÍÓÚÑ]/gi, "").length;
+  if (letras < 4) return false;
+  if (/MU[NÑ]OZ TAMAYO|ASOCIADOS ABOGADOS/i.test(v)) return false;
+  if (TECNOLOGICOS.test(v)) return false;
+  if (/(NIT|CUFE|FACTURA|RESPONSABLE|AGENTE|R[EÉ]GIMEN|REGIMEN|ACTIVIDAD|CONTRIBUYENTE|COMUN|BOGOTA|RES\.|AUTORIZACION|NUMERACION|VIGENCIA|CLIENTE|VENDEDOR|CAJERO|MESA|CUBIERTOS|CONDICION|DIRECCION|TELEFONO|ELABORADO|SOFTWARE|FABRICANTE|PROVEEDOR TECNOLOGICO|ESTIMADO|TOTAL|DETALLE|IMPUESTO)/i.test(v)) return false;
+  return true;
+}
+
 function emisor(txt, nit) {
+  /* El pie de una tirilla nombra al fabricante del software y a su proveedor
+     tecnológico, ambos con forma societaria. Se corta el texto ahí: nada de
+     lo que viene después es el emisor. */
+  var corte = String(txt).search(/Software\s+Sistema|Fabricante\s+del\s+Software|Proveedor\s+Tecnol[oó]gico|Software\s*:/i);
+  if (corte > 120) txt = String(txt).substring(0, corte);
+
+  var lineas = String(txt).split(/[\n\r]+/).map(function (l) {
+    return l.replace(/\s+/g, " ").trim();
+  }).filter(function (l) { return l.length >= 4 && l.length <= 60; });
+
+  var cands = [];
+
+  /* 1 · rótulo explícito — lo más fiable */
+  var m = txt.match(/raz[oó]n\s*social\s*:?\s*([^\n\r|]{4,70})/i) ||
+          txt.match(/nombre\s*o\s*raz[oó]n\s*social\s*:?\s*([^\n\r|]{4,70})/i);
+  if (m) { var v0 = limpiar(m[1]); if (candidatoValido(v0)) cands.push([v0, 100]); }
+
+  /* 2 · línea con sufijo societario, aunque el OCR lo haya degradado.
+        Es la señal que distingue la empresa del nombre comercial. */
+  for (var i = 0; i < lineas.length; i++) {
+    var L = lineas[i];
+    if (!candidatoValido(L)) continue;
+    if (SUFIJO.test(L)) { cands.push([normalizarSufijo(L), 80 - i]); continue; }
+    if (SUFIJO_ROTO.test(L)) {
+      /* Se recorta el residuo ilegible y se deja el nombre. Es preferible
+         entregar «TAKAMI» a entregar el nombre del local. */
+      var base = L.replace(SUFIJO_ROTO, "").replace(/[\s.,\-]+$/, "");
+      if (candidatoValido(base)) cands.push([base, 70 - i]);
+    }
+  }
+
+  /* 3 · alrededor del NIT del emisor */
   if (nit) {
-    /* El nombre suele estar pegado al NIT del emisor, antes o después */
     var n = String(nit).replace(/\D/g, "");
-    var i = txt.indexOf(n);
-    if (i >= 0) {
-      var zona = txt.substring(Math.max(0, i - 130), Math.min(txt.length, i + 190));
-      var m = zona.match(/([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9&.,\- ]{5,70}?(?:S\.?A\.?S|S\.?A\.?|LTDA|LIMITADA|E\.?U|S\.? EN C|Y CIA|CIA)\.?)/);
-      if (m) {
-        var v = m[1].replace(/\s+/g, " ").trim();
-        if (!TECNOLOGICOS.test(v) && !/MU[NÑ]OZ TAMAYO/i.test(v)) return v;
+    var idx = txt.replace(/[.\s]/g, "").indexOf(n);
+    if (idx >= 0) {
+      var pos = txt.indexOf(n.substring(0, 3));
+      if (pos > 0) {
+        var zona = txt.substring(Math.max(0, pos - 160), pos + 120);
+        var zl = zona.split(/[\n\r]+/).map(function (x) { return x.replace(/\s+/g, " ").trim(); });
+        for (var k = 0; k < zl.length; k++) {
+          if (!candidatoValido(zl[k])) continue;
+          if (SUFIJO.test(zl[k])) { cands.push([normalizarSufijo(zl[k]), 60]); }
+          else if (SUFIJO_ROTO.test(zl[k])) {
+            var b2 = zl[k].replace(SUFIJO_ROTO, "").replace(/[\s.,\-]+$/, "");
+            if (candidatoValido(b2)) cands.push([b2, 50]);
+          }
+        }
       }
     }
   }
-  /* Tirilla POS: el nombre comercial va arriba, solo y en mayúsculas */
-  var lineas = String(txt).split(/[\n\r]+/).slice(0, 14);
-  for (var L = 0; L < lineas.length; L++) {
-    var ln = lineas[L].replace(/\s+/g, " ").trim();
-    if (ln.length < 4 || ln.length > 42) continue;
-    if (!/^[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9&.,'\- ]{3,}$/.test(ln)) continue;
-    if (/MU[NÑ]OZ TAMAYO|NIT|N\.I\.T|REGIMEN|R[EÉ]GIMEN|GRANDES|BOGOTA RES|FACTURA|RES\.|CONTRIBUYENTES|AUTORIZACION|TOTAL|CAJERO|VENDEDOR|CLIENTE|MESA|DIRECCION|TELEFONO/i.test(ln)) continue;
-    if (TECNOLOGICOS.test(ln)) continue;
-    if (/^\d/.test(ln)) continue;
-    return ln;
+
+  /* 4 · último recurso: la primera línea limpia en mayúsculas. En una tirilla
+        suele ser el nombre COMERCIAL, no la razón social, así que va de
+        últimas y solo si no hubo nada mejor. */
+  for (var j = 0; j < Math.min(lineas.length, 12); j++) {
+    var Lc = lineas[j];
+    if (!candidatoValido(Lc)) continue;
+    if (!/^[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9&.,'\- ]{3,}$/.test(Lc)) continue;
+    if (/^\d/.test(Lc)) continue;
+    cands.push([Lc.replace(/[\s\-]+$/, ""), 20 - j]);
+    break;
   }
 
-  /* Cualquier forma societaria que no sea MTA ni un proveedor tecnológico */
-  var re = /([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9&.,\- ]{5,70}?(?:S\.?A\.?S|S\.?A\.?|LTDA|LIMITADA|E\.?U|S\.? EN C)\.?)/g, m2;
-  while ((m2 = re.exec(txt)) !== null) {
-    var c = m2[1].replace(/\s+/g, " ").trim();
-    if (/MU[NÑ]OZ TAMAYO|ASOCIADOS ABOGADOS/i.test(c)) continue;
-    if (TECNOLOGICOS.test(c)) continue;
-    if (/(NIT|CUFE|FACTURA|RESPONSABLE|AGENTE|R[EÉ]GIMEN|REGIMEN|ACTIVIDAD|CONTRIBUYENTE|COMUN|BOGOTA|RES\.|AUTORIZACION|NUMERACION|VIGENCIA|CLIENTE|VENDEDOR|CAJERO)/i.test(c)) continue;
-    /* Al menos dos palabras con letras antes de la forma societaria: descarta
-       fragmentos como «C. 5611 SA» que el OCR produce al partir un rótulo. */
-    var previo = c.replace(/\s*(S\.?A\.?S|S\.?A\.?|LTDA|LIMITADA|E\.?U|S\.? EN C)\.?$/i, "").trim();
-    if (previo.replace(/[^A-ZÁÉÍÓÚÑ]/gi, "").length < 5) continue;
-    if (/^\d/.test(previo)) continue;
-    return c;
-  }
-  return "";
+  if (!cands.length) return "";
+  cands.sort(function (a, b) { return b[1] - a[1]; });
+  return cands[0][0];
 }
 
 /* ---------- punto de entrada ---------- */
@@ -1240,7 +1300,9 @@ function deRepresentacion(txt) {
   ]));
 
   d.nitfac = nitEmisor(t);
-  d.proveedor = emisor(t, d.nitfac);
+  /* emisor() trabaja por líneas: se le pasa el texto ORIGINAL, no el que ya
+     colapsó los saltos en espacios. */
+  d.proveedor = emisor(txt, d.nitfac) || emisor(t, d.nitfac);
 
   /* IMP exige una cifra con separador o de cuatro dígitos. Sin eso, un
      «IVA(19%) 11%» de la tabla de ítems se confunde con el valor del IVA. */
@@ -1473,7 +1535,11 @@ function normalizar(txt) {
   t = t.replace(/(\d{1,3})\.\s(\d{3})/g, "$1.$2");
   /* confusiones dentro de números */
   t = t.replace(/(\d)[Oo](\d)/g, "$10$2").replace(/(\d)[lI](\d)/g, "$11$2");
-  t = t.replace(/\s{2,}/g, " ");
+  /* Se colapsan solo los espacios HORIZONTALES. Colapsar \s incluiría los
+     saltos de línea y fusionaría renglones: en el recibo probado, eso enterró
+     la razón social «TAKAMI S.A» dentro de una línea con tres rótulos más. */
+  t = t.replace(/[ \t]{2,}/g, " ");
+  t = t.replace(/[ \t]*\n[ \t]*/g, "\n").replace(/\n{3,}/g, "\n\n");
   return t;
 }
 
