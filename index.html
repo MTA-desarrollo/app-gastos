@@ -274,6 +274,21 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
 .itxt span{display:block}
 .btn.chico{padding:8px 15px;font-size:13px;flex:none}
 .ix{border:0;background:transparent;color:var(--deep);font-size:21px;cursor:pointer;padding:0 3px;flex:none;opacity:.6}
+.hoja-alta{max-height:92vh;overflow-y:auto}
+.visor{position:relative;width:100%;height:46vh;max-height:400px;overflow:hidden;
+       background:#0d1520;border-radius:12px;touch-action:none;cursor:grab}
+.visor:active{cursor:grabbing}
+.visor img{position:absolute;transform-origin:0 0;will-change:transform;
+           image-rendering:auto;user-select:none;-webkit-user-drag:none}
+.marco{position:absolute;inset:8% 6%;border:2px solid var(--brass);border-radius:8px;
+       box-shadow:0 0 0 9999px rgba(10,20,32,.42);pointer-events:none}
+.ctrl{display:flex;align-items:center;gap:10px;margin-top:12px}
+.ctrl input[type=range]{flex:1;accent-color:var(--brass)}
+.cbtn{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);
+      background:var(--paper-2);color:var(--ink);font-size:18px;cursor:pointer;flex:none}
+.cbtn:active{background:var(--brass-soft)}
+.diag{font-family:"Source Code Pro",ui-monospace,monospace;font-size:11px;line-height:1.5;
+      white-space:pre-wrap;background:var(--paper-2)}
 .velo{position:fixed;inset:0;z-index:70;background:rgba(10,20,32,.6);
       display:flex;align-items:flex-end;justify-content:center;
       backdrop-filter:blur(3px);animation:aparece .2s ease}
@@ -479,6 +494,37 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
   </div>
 </section>
 
+<!-- Visor de la foto. Recortar el área útil antes de leer sube el acierto del
+     OCR más que cualquier ajuste del motor: menos ruido, letra más grande. -->
+<div class="velo" id="veloFoto" hidden>
+  <div class="hoja hoja-alta">
+    <div class="hcab">
+      <div><b>Ajuste la foto</b><span>Acerque y recorte la parte con los datos</span></div>
+      <button class="ix" id="cerrarFoto">&times;</button>
+    </div>
+
+    <div class="visor" id="visor">
+      <img id="imgVisor" alt="">
+      <div class="marco" id="marco"></div>
+    </div>
+
+    <div class="ctrl">
+      <button class="cbtn" id="zoomMenos" title="Alejar">&minus;</button>
+      <input type="range" id="zoom" min="100" max="400" value="100">
+      <button class="cbtn" id="zoomMas" title="Acercar">+</button>
+      <button class="cbtn" id="girar" title="Girar">⟳</button>
+    </div>
+    <p class="hint" style="text-align:center;margin:6px 0 0">
+      Arrastre para mover · deslice para acercar
+    </p>
+
+    <div class="btns">
+      <button class="btn sec" id="usarTodo">Usar la foto completa</button>
+      <button class="btn pri" id="usarRecorte">Leer esta parte</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ MIS GASTOS ============ -->
 <section class="pane" id="pane-mis" hidden>
   <div class="resumen"><span id="sumN">0 gastos</span><b id="sumV">$ 0</b></div>
@@ -537,6 +583,15 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
 <section class="pane" id="pane-bitacora" hidden>
   <div class="card" style="padding:12px 15px">
     <label class="chk"><input type="checkbox" id="pAuto"> Prohibir autoaprobación <span style="color:var(--faint)">· parámetro D14</span></label>
+  </div>
+  <div class="card" style="padding:12px 15px">
+    <label class="chk"><input type="checkbox" id="pDiag"> Mostrar el texto que leyó la app
+      <span style="color:var(--faint)">· para diagnosticar lecturas fallidas</span></label>
+  </div>
+  <div class="card" id="cardDiag" hidden>
+    <p class="tit">Texto leído del último soporte</p>
+    <textarea id="txtDiag" rows="12" readonly class="diag"></textarea>
+    <button class="mini" id="copiarDiag">Copiar</button>
   </div>
   <div id="colaBita"></div>
   <p class="pie">Los datos se guardan en este navegador ·
@@ -1172,6 +1227,25 @@ function nitEmisor(txt) {
     }
   }
 
+  /* Último recurso: el OCR confunde dígitos con letras. Se normalizan las
+     confusiones habituales sobre secuencias que ya parecen números y se busca
+     otra vez. «83O.O81.427» pasa a «830.081.427». */
+  if (!vistos.length) {
+    var arreglado = String(txt).replace(/[0-9OoQIl|SsBb.,\s-]{11,16}/g, function (frag) {
+      if ((frag.match(/\d/g) || []).length < 5) return frag;
+      return frag.replace(/[OoQ]/g, "0").replace(/[Il|]/g, "1")
+                 .replace(/[Ss]/g, "5").replace(/[Bb]/g, "8");
+    });
+    var reC = /\b(\d{3})[.,\s]?(\d{3})[.,\s]?(\d{3})\b/g, mc;
+    while ((mc = reC.exec(arreglado)) !== null) {
+      var nc = mc[1] + mc[2] + mc[3];
+      if (nc === NIT_PROPIO || !/^[89]/.test(nc)) continue;
+      var ac = arreglado.substring(Math.max(0, mc.index - 60), mc.index);
+      if (/tel[eé]fono|celular|cuenta|autorizaci|resoluci|rango|numeraci/i.test(ac)) continue;
+      if (vistos.indexOf(nc) < 0) vistos.push(nc);
+    }
+  }
+
   /* Sin rótulo NIT: un número de nueve dígitos que empiece en 8 o 9, que es
      el rango de los NIT de empresa. Los de diez dígitos se descartan: en
      Colombia un teléfono fijo también los tiene, y sale en toda factura. */
@@ -1675,6 +1749,196 @@ window.MTAOCR = {
   liberar: liberar,
   disponible: function () { return typeof createImageBitmap === "function"; }
 };
+})();
+</script>
+<script>/* =========================================================================
+   MTA · Visor de la foto, con acercamiento y recorte
+   =========================================================================
+   Recortar el área con los datos antes de leer sube el acierto del OCR más
+   que cualquier ajuste del motor: se elimina el fondo, la mano, el resto de
+   la mesa, y el texto ocupa más píxeles de la imagen que se procesa.
+
+   El usuario arrastra, acerca con dos dedos o con la barra, y decide si lee
+   la foto completa o solo lo enmarcado.
+   ========================================================================= */
+(function () {
+"use strict";
+
+var est = { esc: 1, x: 0, y: 0, giro: 0, w: 0, h: 0, blob: null, resolver: null };
+var img, visor, marco, rango;
+
+function aplicar() {
+  img.style.transform =
+    "translate(" + est.x + "px," + est.y + "px) scale(" + est.esc + ") rotate(" + est.giro + "deg)";
+}
+
+function encajar() {
+  var vw = visor.clientWidth, vh = visor.clientHeight;
+  var girado = (est.giro / 90) % 2 !== 0;
+  var iw = girado ? est.h : est.w, ih = girado ? est.w : est.h;
+  var e = Math.min(vw / iw, vh / ih);
+  est.esc = e;
+  est.x = (vw - est.w * e) / 2;
+  est.y = (vh - est.h * e) / 2;
+  if (girado) {
+    est.x = (vw - est.h * e) / 2 + (est.h * e - est.w * e) / 2;
+    est.y = (vh - est.w * e) / 2 + (est.w * e - est.h * e) / 2;
+  }
+  rango.value = Math.round(e * 100 / (e || 1) * 1);
+  rango.min = 50; rango.max = 400; rango.value = 100;
+  est.base = e;
+  aplicar();
+}
+
+/* ---------- gestos ---------- */
+function conectarGestos() {
+  var arrastrando = false, px = 0, py = 0, dist0 = 0, esc0 = 1;
+
+  function centro(t) {
+    return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 };
+  }
+  function separacion(t) {
+    var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  visor.addEventListener("pointerdown", function (e) {
+    arrastrando = true; px = e.clientX; py = e.clientY;
+    visor.setPointerCapture(e.pointerId);
+  });
+  visor.addEventListener("pointermove", function (e) {
+    if (!arrastrando) return;
+    est.x += e.clientX - px; est.y += e.clientY - py;
+    px = e.clientX; py = e.clientY;
+    aplicar();
+  });
+  ["pointerup", "pointercancel"].forEach(function (ev) {
+    visor.addEventListener(ev, function () { arrastrando = false; });
+  });
+
+  visor.addEventListener("touchstart", function (e) {
+    if (e.touches.length === 2) {
+      arrastrando = false;
+      dist0 = separacion(e.touches); esc0 = est.esc;
+    }
+  }, { passive: true });
+  visor.addEventListener("touchmove", function (e) {
+    if (e.touches.length !== 2) return;
+    e.preventDefault();
+    var f = separacion(e.touches) / (dist0 || 1);
+    var nueva = Math.max(est.base * 0.5, Math.min(est.base * 6, esc0 * f));
+    var c = centro(e.touches), r = visor.getBoundingClientRect();
+    var cx = c.x - r.left, cy = c.y - r.top;
+    est.x = cx - (cx - est.x) * (nueva / est.esc);
+    est.y = cy - (cy - est.y) * (nueva / est.esc);
+    est.esc = nueva;
+    rango.value = Math.round(nueva / est.base * 100);
+    aplicar();
+  }, { passive: false });
+
+  visor.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    var f = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    var nueva = Math.max(est.base * 0.5, Math.min(est.base * 6, est.esc * f));
+    var r = visor.getBoundingClientRect();
+    var cx = e.clientX - r.left, cy = e.clientY - r.top;
+    est.x = cx - (cx - est.x) * (nueva / est.esc);
+    est.y = cy - (cy - est.y) * (nueva / est.esc);
+    est.esc = nueva;
+    rango.value = Math.round(nueva / est.base * 100);
+    aplicar();
+  }, { passive: false });
+}
+
+function zoomA(pct) {
+  var nueva = est.base * (pct / 100);
+  var cx = visor.clientWidth / 2, cy = visor.clientHeight / 2;
+  est.x = cx - (cx - est.x) * (nueva / est.esc);
+  est.y = cy - (cy - est.y) * (nueva / est.esc);
+  est.esc = nueva;
+  aplicar();
+}
+
+/* ---------- recorte ---------- */
+/* Se recorta lo que quedó dentro del marco, en coordenadas de la imagen
+   original, para no perder resolución. */
+async function recortar() {
+  var r = marco.getBoundingClientRect(), v = visor.getBoundingClientRect();
+  var mx = r.left - v.left, my = r.top - v.top;
+
+  var bmp = await createImageBitmap(est.blob);
+  var girado = (est.giro / 90) % 2 !== 0;
+
+  var cv = document.createElement("canvas");
+  cv.width = Math.round(r.width / est.esc);
+  cv.height = Math.round(r.height / est.esc);
+  var ctx = cv.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, cv.width, cv.height);
+
+  ctx.save();
+  ctx.translate(-(mx - est.x) / est.esc, -(my - est.y) / est.esc);
+  if (est.giro) {
+    ctx.translate(girado ? bmp.height / 2 : bmp.width / 2,
+                  girado ? bmp.width / 2 : bmp.height / 2);
+    ctx.rotate(est.giro * Math.PI / 180);
+    ctx.translate(-bmp.width / 2, -bmp.height / 2);
+  }
+  ctx.drawImage(bmp, 0, 0);
+  ctx.restore();
+  if (bmp.close) bmp.close();
+
+  return new Promise(function (res) { cv.toBlob(res, "image/jpeg", 0.92); });
+}
+
+/* ---------- punto de entrada ----------
+   Devuelve el Blob a leer, o null si el usuario cerró el visor. */
+function abrir(blob) {
+  return new Promise(function (resolver) {
+    est.blob = blob; est.giro = 0; est.resolver = resolver;
+    var velo = document.getElementById("veloFoto");
+    img = document.getElementById("imgVisor");
+    visor = document.getElementById("visor");
+    marco = document.getElementById("marco");
+    rango = document.getElementById("zoom");
+
+    var url = URL.createObjectURL(blob);
+    img.onload = function () {
+      est.w = img.naturalWidth; est.h = img.naturalHeight;
+      img.style.width = est.w + "px"; img.style.height = est.h + "px";
+      velo.hidden = false;
+      setTimeout(encajar, 30);
+    };
+    img.src = url;
+
+    function cerrar(resultado) {
+      velo.hidden = true;
+      URL.revokeObjectURL(url);
+      resolver(resultado);
+    }
+
+    document.getElementById("cerrarFoto").onclick = function () { cerrar(null); };
+    document.getElementById("usarTodo").onclick = function () { cerrar(blob); };
+    document.getElementById("usarRecorte").onclick = async function () {
+      var b = null;
+      try { b = await recortar(); } catch (e) { b = blob; }
+      cerrar(b || blob);
+    };
+    rango.oninput = function () { zoomA(+this.value); };
+    document.getElementById("zoomMas").onclick = function () {
+      rango.value = Math.min(400, +rango.value + 25); zoomA(+rango.value);
+    };
+    document.getElementById("zoomMenos").onclick = function () {
+      rango.value = Math.max(50, +rango.value - 25); zoomA(+rango.value);
+    };
+    document.getElementById("girar").onclick = function () {
+      est.giro = (est.giro + 90) % 360; encajar();
+    };
+    conectarGestos();
+  });
+}
+
+window.MTAVISOR = { abrir: abrir };
 })();
 </script>
 <script>/* =========================================================================
@@ -2749,9 +3013,10 @@ async function entraArchivo(file) {
 
   /* D30 — la app lee el soporte sola, sin botón de escaneo */
   var r = null, t0 = Date.now();
-  try { r = await leerSoporte(paraLeer); } catch (e) {}
+  try { r = await leerSoporte(paraLeer); } catch (e) { window.MTAERROR = String(e && e.message || e); }
   av.hidden = true;
   var seg = Math.round((Date.now() - t0) / 1000);
+  window.MTAULTIMO = r ? { texto: r.texto || "", via: r.via, ms: seg } : { texto: "", via: null, ms: seg };
   if (r && r.datos) {
     var d = r.datos;
     /* Razon social: el QR no la trae. Se busca en el texto del documento, y si
@@ -3182,7 +3447,18 @@ function exportar(filtro) {
 }
 
 /* ====================== BITÁCORA ====================== */
+function pintarDiag() {
+  var u = window.MTAULTIMO || {};
+  var t = "";
+  if (u.via) t += "vía: " + u.via + "\n";
+  if (u.ms != null) t += "tiempo: " + u.ms + " s\n";
+  if (window.MTAERROR) t += "error: " + window.MTAERROR + "\n";
+  t += "\n" + (u.texto || "(no se extrajo texto del soporte)");
+  $("#txtDiag").value = t;
+}
+
 function pintarBitacora() {
+  pintarDiag();
   var c = $("#colaBita");
   var b = M.S.Bitacora.slice().reverse();
   c.innerHTML = b.length ? "" : '<p class="vacio">Sin eventos.</p>';
@@ -3224,7 +3500,20 @@ function arrancar() {
   $$(".tab").forEach(function (b) { b.onclick = function () { ir(b.dataset.p); }; });
   $("#btnFoto").onclick = function () { $("#inFoto").click(); };
   $("#btnArchivo").onclick = function () { $("#inArchivo").click(); };
-  $("#inFoto").onchange = function () { Array.from(this.files).forEach(entraArchivo); this.value = ""; };
+  $("#inFoto").onchange = async function () {
+    var fs = Array.from(this.files); this.value = "";
+    for (var i = 0; i < fs.length; i++) {
+      var f = fs[i];
+      /* Antes de leer, el usuario acerca y recorta. Es lo que más sube el
+         acierto del OCR: quita el fondo y agranda el texto. */
+      if (window.MTAVISOR && f.type.indexOf("image") === 0) {
+        var b = await window.MTAVISOR.abrir(f);
+        if (!b) continue;
+        f = new File([b], f.name || "foto.jpg", { type: b.type || "image/jpeg" });
+      }
+      await entraArchivo(f);
+    }
+  };
   $("#inArchivo").onchange = function () { Array.from(this.files).forEach(entraArchivo); this.value = ""; };
   ["fBase","fIva","fOtros","fTotal"].forEach(function (id) { $("#" + id).oninput = recalcular; });
   activarMoneda();
@@ -3242,6 +3531,16 @@ function arrancar() {
     if (!r.ok) return toast(r.msg, "err");
     toast(r.r.Title + " creado y enviado a aprobación final.", "ok");
     ir("final");
+  };
+  $("#pDiag").onchange = function () {
+    $("#cardDiag").hidden = !this.checked;
+    if (this.checked) pintarDiag();
+  };
+  $("#copiarDiag").onclick = function () {
+    var t = $("#txtDiag");
+    t.select();
+    try { document.execCommand("copy"); toast("Texto copiado."); }
+    catch (e) { toast("Seleccione el texto y cópielo con Ctrl+C.", "warn"); }
   };
   $("#expTodo").onclick = function () { exportar("todo"); };
   $("#expMes").onclick  = function () { exportar("mes"); };
