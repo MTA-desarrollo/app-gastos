@@ -94,6 +94,9 @@ label.f > span{display:block;font-size:12px;color:var(--slate);margin-bottom:5px
    puede equivocarse en un dígito. El usuario debe verificarlos. */
 .auto-ocr{background:var(--rosa-bg)!important;border-color:var(--rosa-bor)!important;color:var(--ink)}
 .avisoocr{margin-top:11px}
+.aviso .mini{margin-top:7px;background:var(--rosa);color:#fff;border-color:var(--rosa);
+             padding:6px 12px;font-size:12px}
+.aviso .mini:active{opacity:.85}
 .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate)}
 .chk input{width:auto}
 .hint{font-size:11.5px;color:var(--faint);margin:-4px 0 9px}
@@ -879,10 +882,14 @@ async function datosDePDF(file){
       var png = await window.MTAPDF.rasterizar(buf, window.MTAAVISO || null);
       window.MTAPASO = "PDF rasterizado, leyendo con OCR";
       if(png){
+        /* Se conserva la página rasterizada: si faltan campos, el usuario podrá
+           recortarla y releerla sin volver a convertir el PDF. */
+        window.MTAIMAGEN = png;
         var ro = await window.MTAOCR.reconocer(png, window.MTAAVISO || null);
         if(ro && ro.texto){
           var dro = window.MTAREPRE.deRepresentacion(ro.texto);
           if(dro) return {datos:dro, via:"ocr", texto:ro.texto, confianza:ro.confianza};
+          return {datos:null, via:"ocr", texto:ro.texto, confianza:ro.confianza};
         }
       }
     }catch(e){ window.MTAERROR = "PDF escaneado · " + (window.MTAPASO || "") + " · " + String(e && e.message || e); }
@@ -907,6 +914,7 @@ async function leerSoporte(file){
       if(t){ var d = analizarTexto(t); if(hayDatos(d)) return {datos:d, via:"qr"}; }
       /* 2. sin QR legible, se lee el papel con OCR */
       if(window.MTAOCR && window.MTAREPRE){
+        window.MTAIMAGEN = file;
         var r = await window.MTAOCR.reconocer(file, window.MTAAVISO || null);
         if(r && r.texto){
           var dr = window.MTAREPRE.deRepresentacion(r.texto);
@@ -1369,7 +1377,40 @@ function emisor(txt, nit) {
     }
   }
 
-  /* 3 · alrededor del NIT del emisor */
+  /* 3 · texto sin saltos de línea. El texto extraído de un PDF llega como una
+        sola línea larga, así que las vías por renglón no encuentran nada. Aquí
+        se busca la forma societaria MÁS CERCANA al NIT del emisor: en una
+        factura el nombre va pegado al número. */
+  if (nit) {
+    var plano = String(txt).replace(/\s+/g, " ");
+    var nn = String(nit).replace(/\D/g, "");
+    var pos = plano.indexOf(nn);
+    if (pos < 0) pos = plano.indexOf(nn.substring(0, 6));
+    if (pos > 0) {
+      /* El nombre puede ir antes o después del NIT según el diseño de la
+         factura. En la probada iba 42 caracteres DESPUÉS. Se mira a ambos
+         lados y gana el más cercano al número. */
+      var ini = Math.max(0, pos - 240), zona = plano.substring(ini, pos + 260);
+      var reS = /([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ0-9&.,\- ]{4,60}?(?:S\.?A\.?S|S\.?A\.?|LTDA|LIMITADA|E\.?U|S\.? EN C)\.?)(?=\s|$)/g, ms;
+      var mejorV = null, mejorD = 1e9;
+      while ((ms = reS.exec(zona)) !== null) {
+        var vv = ms[1].replace(/\s+/g, " ").trim();
+        vv = vv.replace(/^.*?(?:Proveedor\s+tecnol[oó]gico|Software|Raz[oó]n\s*social|Emisor)\s*:?\s*/i, "");
+        /* La dirección suele quedar pegada por delante: «No. 49-38 Oficina 1308
+           DOSHACHE CONSULTORIA SAS». Se corta después del último número, que es
+           donde termina la dirección y empieza el nombre. */
+        vv = vv.replace(/^.*\d[\d\-]*\s+(?=[A-ZÁÉÍÓÚÑ]{2})/, "");
+        vv = vv.replace(/^(?:Calle|Carrera|Cra|Avenida|Av|Diagonal|Transversal|Autopista|Km|No)\b[^A-ZÁÉÍÓÚÑ]*/i, "");
+        vv = vv.trim();
+        if (!candidatoValido(vv)) continue;
+        var dd = Math.abs((ini + ms.index) - pos);
+        if (dd < mejorD) { mejorD = dd; mejorV = vv; }
+      }
+      if (mejorV) cands.push([normalizarSufijo(mejorV), 90]);
+    }
+  }
+
+  /* 4 · alrededor del NIT del emisor */
   if (nit) {
     var n = String(nit).replace(/\D/g, "");
     var idx = txt.replace(/[.\s]/g, "").indexOf(n);
@@ -1390,7 +1431,7 @@ function emisor(txt, nit) {
     }
   }
 
-  /* 4 · último recurso: la primera línea limpia en mayúsculas. En una tirilla
+  /* 5 · último recurso: la primera línea limpia en mayúsculas. En una tirilla
         suele ser el nombre COMERCIAL, no la razón social, así que va de
         últimas y solo si no hubo nada mejor. */
   for (var j = 0; j < Math.min(lineas.length, 12); j++) {
@@ -3181,9 +3222,20 @@ function diligenciar(d, via) {
       : "";
     if (faltan.length) {
       av.innerHTML += (av.innerHTML ? "<br>" : "") +
-        "No se pudo leer: <b>" + faltan.join(", ") + "</b>. " +
-        (incierto ? "Vuelva a tomar la foto acercando esa parte del documento, o escríbalo a mano."
-                  : "Escríbalo a mano.");
+        "No se pudo leer: <b>" + faltan.join(", ") + "</b>.";
+      /* Si la lectura vino de una imagen —foto, escaneo o PDF rasterizado—, el
+         usuario puede recortar la zona que falta y releer sin volver a
+         adjuntar nada. Es lo que rescata el NIT de un escaneo con anotaciones
+         encima o con el encabezado pequeño. */
+      if (incierto && window.MTAIMAGEN && window.MTAVISOR) {
+        av.innerHTML += ' <button class="mini" id="releer">Recortar y volver a leer</button>';
+        setTimeout(function () {
+          var b = document.getElementById("releer");
+          if (b) b.onclick = recortarYReleer;
+        }, 0);
+      } else {
+        av.innerHTML += " Escríbalo a mano.";
+      }
     }
   }
   if (!d.proveedor) {
@@ -3260,6 +3312,44 @@ function guardarGasto(enviar) {
 
 /* Vacía solo lo que proviene de la lectura del soporte. Concepto, destino y
    descripción los escribe la persona, así que se conservan. */
+/* Reabre la imagen que se usó para el OCR, deja que el usuario recorte la
+   zona con los datos que faltaron, y lee otra vez solo ese recorte. */
+async function recortarYReleer() {
+  var img = window.MTAIMAGEN;
+  if (!img || !window.MTAVISOR) return;
+  var b = await window.MTAVISOR.abrir(img);
+  if (!b) return;
+
+  var av = $("#leyendo");
+  av.hidden = false;
+  av.querySelector("span:last-child").textContent = "Leyendo el recorte…";
+  var r = null;
+  try {
+    var t = await window.MTAOCR.reconocer(b, window.MTAAVISO || null);
+    if (t && t.texto) {
+      window.MTAULTIMO = { texto: t.texto, via: "ocr · recorte", ms: Math.round((t.ms || 0) / 1000) };
+      var d = window.MTAREPRE.deRepresentacion(t.texto);
+      if (d) r = { datos: d, via: "ocr", texto: t.texto };
+    }
+  } catch (e) {}
+  av.hidden = true;
+
+  if (!r) { toast("El recorte tampoco se pudo leer. Escriba los datos a mano.", "warn"); return; }
+
+  /* Solo se rellena lo que estaba vacío: no se pisa lo que ya se había leído
+     bien en la primera pasada. */
+  var mapa = { fNumero: "numfac", fNit: "nitfac", fProveedor: "proveedor", fCufe: "cufe" };
+  var n = 0;
+  Object.keys(mapa).forEach(function (id) {
+    var v = r.datos[mapa[id]];
+    if (v && !$("#" + id).value) { $("#" + id).value = v; $("#" + id).classList.add("auto-ocr"); n++; }
+  });
+  if (r.datos.fecfac && !$("#fFecha").value) { $("#fFecha").value = r.datos.fecfac; n++; }
+
+  toast(n ? "Se completaron " + n + " campos con el recorte."
+          : "El recorte no aportó campos nuevos.", n ? "ok" : "warn");
+}
+
 function limpiarLectura() {
   ["fNumero","fNit","fProveedor","fBase","fIva","fOtros","fTotal","fCufe"]
     .forEach(function (id) { var e = $("#" + id); e.value = ""; e.classList.remove("auto", "auto-ocr"); });
@@ -3631,7 +3721,20 @@ function arrancar() {
       await entraArchivo(f);
     }
   };
-  $("#inArchivo").onchange = function () { Array.from(this.files).forEach(entraArchivo); this.value = ""; };
+  $("#inArchivo").onchange = async function () {
+    var fs = Array.from(this.files); this.value = "";
+    for (var i = 0; i < fs.length; i++) {
+      var f = fs[i];
+      /* Una imagen adjunta también pasa por el visor: da lo mismo si viene de
+         la cámara o del explorador de archivos. */
+      if (window.MTAVISOR && esImagen(f) && !esPDF(f) && !esXML(f)) {
+        var b = await window.MTAVISOR.abrir(f);
+        if (!b) continue;
+        f = new File([b], f.name || "imagen.jpg", { type: b.type || "image/jpeg" });
+      }
+      await entraArchivo(f);
+    }
+  };
   ["fBase","fIva","fOtros","fTotal"].forEach(function (id) { $("#" + id).oninput = recalcular; });
   activarMoneda();
   $("#fNit").oninput = function () {
