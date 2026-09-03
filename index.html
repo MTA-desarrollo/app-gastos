@@ -278,10 +278,27 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
 .visor{position:relative;width:100%;height:46vh;max-height:400px;overflow:hidden;
        background:#0d1520;border-radius:12px;touch-action:none;cursor:grab}
 .visor:active{cursor:grabbing}
-.visor img{position:absolute;transform-origin:0 0;will-change:transform;
-           image-rendering:auto;user-select:none;-webkit-user-drag:none}
-.marco{position:absolute;inset:8% 6%;border:2px solid var(--brass);border-radius:8px;
-       box-shadow:0 0 0 9999px rgba(10,20,32,.42);pointer-events:none}
+.visor img{position:absolute;transform-origin:center center;will-change:transform;
+           user-select:none;-webkit-user-drag:none;pointer-events:none}
+/* El marco de recorte: se arrastra desde el centro o desde cualquiera de sus
+   ocho manijas. En un celular las manijas necesitan una zona táctil mucho
+   mayor que su tamaño visible, de ahí el ::after invisible. */
+.marco{position:absolute;border:2px solid var(--brass);border-radius:4px;
+       box-shadow:0 0 0 9999px rgba(10,20,32,.5);cursor:move;touch-action:none}
+.man{position:absolute;background:var(--brass);border:2px solid #fff;border-radius:3px;
+     box-shadow:0 1px 4px rgba(0,0,0,.45);touch-action:none;font-style:normal}
+.man::after{content:"";position:absolute;inset:-14px}
+.man-nw,.man-ne,.man-se,.man-sw{width:16px;height:16px}
+.man-n,.man-s{width:34px;height:11px;left:50%;margin-left:-17px}
+.man-e,.man-w{width:11px;height:34px;top:50%;margin-top:-17px}
+.man-nw{left:-9px;top:-9px;cursor:nwse-resize}
+.man-ne{right:-9px;top:-9px;cursor:nesw-resize}
+.man-se{right:-9px;bottom:-9px;cursor:nwse-resize}
+.man-sw{left:-9px;bottom:-9px;cursor:nesw-resize}
+.man-n{top:-7px;cursor:ns-resize}
+.man-s{bottom:-7px;cursor:ns-resize}
+.man-w{left:-7px;cursor:ew-resize}
+.man-e{right:-7px;cursor:ew-resize}
 .ctrl{display:flex;align-items:center;gap:10px;margin-top:12px}
 .ctrl input[type=range]{flex:1;accent-color:var(--brass)}
 .cbtn{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);
@@ -499,7 +516,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
 <div class="velo" id="veloFoto" hidden>
   <div class="hoja hoja-alta">
     <div class="hcab">
-      <div><b>Ajuste la foto</b><span>Acerque y recorte la parte con los datos</span></div>
+      <div><b>Ajuste la foto</b><span>Recorte la parte con los datos del proveedor</span></div>
       <button class="ix" id="cerrarFoto">&times;</button>
     </div>
 
@@ -514,8 +531,8 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
       <button class="cbtn" id="zoomMas" title="Acercar">+</button>
       <button class="cbtn" id="girar" title="Girar">⟳</button>
     </div>
-    <p class="hint" style="text-align:center;margin:6px 0 0">
-      Arrastre para mover · deslice para acercar
+    <p class="hint" style="text-align:center;margin:7px 0 0">
+      Arrastre los bordes del marco para recortar · el zoom solo sirve para ver
     </p>
 
     <div class="btns">
@@ -858,7 +875,9 @@ async function datosDePDF(file){
      no decodifica por su cuenta. */
   if(window.MTAPDF && window.MTAOCR && window.MTAREPRE){
     try{
+      window.MTAPASO = "rasterizando el PDF";
       var png = await window.MTAPDF.rasterizar(buf, window.MTAAVISO || null);
+      window.MTAPASO = "PDF rasterizado, leyendo con OCR";
       if(png){
         var ro = await window.MTAOCR.reconocer(png, window.MTAAVISO || null);
         if(ro && ro.texto){
@@ -866,7 +885,7 @@ async function datosDePDF(file){
           if(dro) return {datos:dro, via:"ocr", texto:ro.texto, confianza:ro.confianza};
         }
       }
-    }catch(e){ }
+    }catch(e){ window.MTAERROR = "PDF escaneado · " + (window.MTAPASO || "") + " · " + String(e && e.message || e); }
   }
   return null;
 }
@@ -1472,11 +1491,47 @@ function deRepresentacion(txt) {
     ]);
   }
 
+  /* La propina y el servicio aparecen rotulados en las tirillas de
+     restaurante y no son ni base ni IVA: van a «Otros». */
+  var propina = buscar(t, [
+    rx("Propina\\s*/?\\s*\\w{0,10}\\s*\\.{0,20}\\s*"),
+    rx("Servicio\\s+voluntario\\s*\\.{0,20}\\s*"),
+    rx("Propina\\s*\\.{0,20}\\s*")
+  ]);
+
   var nb = limpiarNumero(base), ni = limpiarNumero(iva),
       nt = limpiarNumero(total), no = limpiarNumero(otros);
+  var np = limpiarNumero(propina);
+  if (np && np > 0) no = (no || 0) + np;
 
-  /* Si el "Total" capturado es menor que la base, se tomó una cifra
-     equivocada. Se reconstruye. */
+  /* ---------- coherencia aritmética ----------
+     El OCR se equivoca en un dígito con facilidad: en la prueba real leyó la
+     base como 496.240,74 en un sitio y 498.240,74 en otro. Se buscan los demás
+     importes del documento y se acepta uno solo si está MUY cerca del que ya
+     teníamos —o sea, si es la misma cifra con un dígito distinto— y además
+     hace cuadrar base + otros + IVA con el total.
+
+     La cercanía es la salvaguarda: sin ella, «TOTAL PRODUCTOS» también cuadra
+     y se tomaría una cifra que no es la base gravable. */
+  if (nt && nb) {
+    var objetivo = nt - (ni || 0) - (no || 0);
+    if (objetivo > 0 && Math.abs(nb - objetivo) > 1) {
+      var todos = [], mm, reN = new RegExp(IMP, "g");
+      while ((mm = reN.exec(t)) !== null) {
+        var x = limpiarNumero(mm[1]);
+        if (x && x > 0 && x < nt) todos.push(x);
+      }
+      var margen = Math.max(20, nb * 0.02);        /* un dígito de diferencia */
+      var mejor = null, dif = Math.abs(nb - objetivo);
+      for (var z = 0; z < todos.length; z++) {
+        if (Math.abs(todos[z] - nb) > margen) continue;
+        var dz = Math.abs(todos[z] - objetivo);
+        if (dz < dif) { mejor = todos[z]; dif = dz; }
+      }
+      if (mejor) nb = mejor;
+    }
+  }
+
   /* Un total menor que la base es una cifra mal capturada */
   if (nb && nt && nt < nb) nt = null;
   if (!nt && nb) nt = nb + (ni || 0) + (no || 0);
@@ -1486,10 +1541,19 @@ function deRepresentacion(txt) {
     if (Math.abs(nt - nb) < 2) ni = null;
   }
 
-  if (nb) d.valfac = String(nb);
-  if (ni) d.valiva = String(ni);
-  if (no) d.valotroim = String(no);
-  if (nt) d.valtolfac = String(nt);
+  /* Con base, otros y total coherentes, se recalcula el resto por diferencia */
+  if (nt && nb && !ni) {
+    var resto = nt - nb - (no || 0);
+    if (resto > 1) no = (no || 0) + resto;
+  }
+
+  /* Se redondea a dos decimales: sumar en coma flotante deja residuos como
+     89679.26000000001, que en pantalla se ven como un error. */
+  function dosDec(x) { return Math.round(x * 100) / 100; }
+  if (nb) d.valfac = String(dosDec(nb));
+  if (ni) d.valiva = String(dosDec(ni));
+  if (no) d.valotroim = String(dosDec(no));
+  if (nt) d.valtolfac = String(dosDec(nt));
 
   var cufe = t.match(/CUFE\s*:?\s*([a-f0-9]{90,100})/i) ||
              t.match(/CUDE\s*:?\s*([a-f0-9]{90,100})/i) ||
@@ -1752,189 +1816,221 @@ window.MTAOCR = {
 })();
 </script>
 <script>/* =========================================================================
-   MTA · Visor de la foto, con acercamiento y recorte
+   MTA · Visor de la foto
    =========================================================================
-   Recortar el área con los datos antes de leer sube el acierto del OCR más
-   que cualquier ajuste del motor: se elimina el fondo, la mano, el resto de
-   la mesa, y el texto ocupa más píxeles de la imagen que se procesa.
+   Dos cosas INDEPENDIENTES:
 
-   El usuario arrastra, acerca con dos dedos o con la barra, y decide si lee
-   la foto completa o solo lo enmarcado.
+     ZOOM     · sirve para VER. Amplía la foto en pantalla para que el usuario
+                distinga si el texto quedó legible. No decide qué se recorta.
+
+     RECORTE  · un marco con ocho manijas —cuatro esquinas y cuatro lados—
+                que se arrastran para delimitar el área que se va a leer.
+
+   El marco se guarda en fracciones de la imagen (de 0 a 1), no en píxeles de
+   pantalla. Por eso el zoom puede cambiar sin que el recorte se mueva.
    ========================================================================= */
 (function () {
 "use strict";
 
-var est = { esc: 1, x: 0, y: 0, giro: 0, w: 0, h: 0, blob: null, resolver: null };
-var img, visor, marco, rango;
+var st = {
+  blob: null, w: 0, h: 0, giro: 0,
+  zoom: 1,
+  pan: { x: 0, y: 0 },
+  rec: { x0: 0.04, y0: 0.04, x1: 0.96, y1: 0.96 }
+};
+var lienzo, img, marco, rango, bmp = null;
 
-function aplicar() {
-  img.style.transform =
-    "translate(" + est.x + "px," + est.y + "px) scale(" + est.esc + ") rotate(" + est.giro + "deg)";
+function dims() {
+  var girado = (st.giro / 90) % 2 !== 0;
+  return { w: girado ? st.h : st.w, h: girado ? st.w : st.h };
 }
 
-function encajar() {
-  var vw = visor.clientWidth, vh = visor.clientHeight;
-  var girado = (est.giro / 90) % 2 !== 0;
-  var iw = girado ? est.h : est.w, ih = girado ? est.w : est.h;
-  var e = Math.min(vw / iw, vh / ih);
-  est.esc = e;
-  est.x = (vw - est.w * e) / 2;
-  est.y = (vh - est.h * e) / 2;
-  if (girado) {
-    est.x = (vw - est.h * e) / 2 + (est.h * e - est.w * e) / 2;
-    est.y = (vh - est.w * e) / 2 + (est.w * e - est.h * e) / 2;
-  }
-  rango.value = Math.round(e * 100 / (e || 1) * 1);
-  rango.min = 50; rango.max = 400; rango.value = 100;
-  est.base = e;
-  aplicar();
+function caja() {
+  var d = dims(), vw = lienzo.clientWidth, vh = lienzo.clientHeight;
+  var e = Math.min(vw / d.w, vh / d.h) * st.zoom;
+  return { e: e, w: d.w * e, h: d.h * e,
+           x: (vw - d.w * e) / 2 + st.pan.x, y: (vh - d.h * e) / 2 + st.pan.y };
 }
 
-/* ---------- gestos ---------- */
-function conectarGestos() {
-  var arrastrando = false, px = 0, py = 0, dist0 = 0, esc0 = 1;
+function pintar() {
+  var c = caja(), d = dims();
+  var girado = (st.giro / 90) % 2 !== 0;
+  img.style.width  = (girado ? c.h : c.w) + "px";
+  img.style.height = (girado ? c.w : c.h) + "px";
+  img.style.left = (c.x + (girado ? (c.w - c.h) / 2 : 0)) + "px";
+  img.style.top  = (c.y + (girado ? (c.h - c.w) / 2 : 0)) + "px";
+  img.style.transform = "rotate(" + st.giro + "deg)";
 
-  function centro(t) {
-    return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 };
-  }
-  function separacion(t) {
-    var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
-    return Math.hypot(dx, dy);
+  marco.style.left   = (c.x + st.rec.x0 * c.w) + "px";
+  marco.style.top    = (c.y + st.rec.y0 * c.h) + "px";
+  marco.style.width  = ((st.rec.x1 - st.rec.x0) * c.w) + "px";
+  marco.style.height = ((st.rec.y1 - st.rec.y0) * c.h) + "px";
+}
+
+var MANIJAS = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+
+function conectarMarco() {
+  var activo = null, ini = null;
+
+  function aFraccion(ev) {
+    var c = caja(), r = lienzo.getBoundingClientRect();
+    return { x: (ev.clientX - r.left - c.x) / c.w, y: (ev.clientY - r.top - c.y) / c.h };
   }
 
-  visor.addEventListener("pointerdown", function (e) {
-    arrastrando = true; px = e.clientX; py = e.clientY;
-    visor.setPointerCapture(e.pointerId);
+  function empezar(ev, cual) {
+    ev.preventDefault(); ev.stopPropagation();
+    activo = cual;
+    ini = { p: aFraccion(ev), rec: { x0: st.rec.x0, y0: st.rec.y0, x1: st.rec.x1, y1: st.rec.y1 } };
+    try { lienzo.setPointerCapture(ev.pointerId); } catch (e) {}
+  }
+
+  MANIJAS.forEach(function (m) {
+    var el = document.createElement("i");
+    el.className = "man man-" + m;
+    el.addEventListener("pointerdown", function (e) { empezar(e, m); });
+    marco.appendChild(el);
   });
-  visor.addEventListener("pointermove", function (e) {
+  marco.addEventListener("pointerdown", function (e) {
+    if (e.target === marco) empezar(e, "mover");
+  });
+
+  lienzo.addEventListener("pointermove", function (ev) {
+    if (!activo) return;
+    var p = aFraccion(ev), r = ini.rec;
+    var dx = p.x - ini.p.x, dy = p.y - ini.p.y, MIN = 0.06;
+    var n = { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 };
+    if (activo === "mover") {
+      var aw = r.x1 - r.x0, ah = r.y1 - r.y0;
+      n.x0 = Math.max(0, Math.min(1 - aw, r.x0 + dx));
+      n.y0 = Math.max(0, Math.min(1 - ah, r.y0 + dy));
+      n.x1 = n.x0 + aw; n.y1 = n.y0 + ah;
+    } else {
+      if (activo.indexOf("w") >= 0) n.x0 = Math.max(0, Math.min(r.x1 - MIN, r.x0 + dx));
+      if (activo.indexOf("e") >= 0) n.x1 = Math.min(1, Math.max(r.x0 + MIN, r.x1 + dx));
+      if (activo.indexOf("n") >= 0) n.y0 = Math.max(0, Math.min(r.y1 - MIN, r.y0 + dy));
+      if (activo.indexOf("s") >= 0) n.y1 = Math.min(1, Math.max(r.y0 + MIN, r.y1 + dy));
+    }
+    st.rec = n;
+    pintar();
+  });
+
+  ["pointerup", "pointercancel"].forEach(function (e) {
+    lienzo.addEventListener(e, function () { activo = null; });
+  });
+}
+
+function conectarZoom() {
+  var arrastrando = false, px = 0, py = 0;
+  lienzo.addEventListener("pointerdown", function (e) {
+    if (e.target === lienzo || e.target === img) { arrastrando = true; px = e.clientX; py = e.clientY; }
+  });
+  lienzo.addEventListener("pointermove", function (e) {
     if (!arrastrando) return;
-    est.x += e.clientX - px; est.y += e.clientY - py;
+    st.pan.x += e.clientX - px; st.pan.y += e.clientY - py;
     px = e.clientX; py = e.clientY;
-    aplicar();
+    pintar();
   });
   ["pointerup", "pointercancel"].forEach(function (ev) {
-    visor.addEventListener(ev, function () { arrastrando = false; });
+    lienzo.addEventListener(ev, function () { arrastrando = false; });
   });
+  lienzo.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    ponerZoom(st.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+  }, { passive: false });
 
-  visor.addEventListener("touchstart", function (e) {
+  var d0 = 0, z0 = 1;
+  lienzo.addEventListener("touchstart", function (e) {
     if (e.touches.length === 2) {
       arrastrando = false;
-      dist0 = separacion(e.touches); esc0 = est.esc;
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      d0 = Math.hypot(dx, dy); z0 = st.zoom;
     }
   }, { passive: true });
-  visor.addEventListener("touchmove", function (e) {
+  lienzo.addEventListener("touchmove", function (e) {
     if (e.touches.length !== 2) return;
     e.preventDefault();
-    var f = separacion(e.touches) / (dist0 || 1);
-    var nueva = Math.max(est.base * 0.5, Math.min(est.base * 6, esc0 * f));
-    var c = centro(e.touches), r = visor.getBoundingClientRect();
-    var cx = c.x - r.left, cy = c.y - r.top;
-    est.x = cx - (cx - est.x) * (nueva / est.esc);
-    est.y = cy - (cy - est.y) * (nueva / est.esc);
-    est.esc = nueva;
-    rango.value = Math.round(nueva / est.base * 100);
-    aplicar();
-  }, { passive: false });
-
-  visor.addEventListener("wheel", function (e) {
-    e.preventDefault();
-    var f = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-    var nueva = Math.max(est.base * 0.5, Math.min(est.base * 6, est.esc * f));
-    var r = visor.getBoundingClientRect();
-    var cx = e.clientX - r.left, cy = e.clientY - r.top;
-    est.x = cx - (cx - est.x) * (nueva / est.esc);
-    est.y = cy - (cy - est.y) * (nueva / est.esc);
-    est.esc = nueva;
-    rango.value = Math.round(nueva / est.base * 100);
-    aplicar();
+    var dx = e.touches[0].clientX - e.touches[1].clientX;
+    var dy = e.touches[0].clientY - e.touches[1].clientY;
+    ponerZoom(z0 * (Math.hypot(dx, dy) / (d0 || 1)));
   }, { passive: false });
 }
 
-function zoomA(pct) {
-  var nueva = est.base * (pct / 100);
-  var cx = visor.clientWidth / 2, cy = visor.clientHeight / 2;
-  est.x = cx - (cx - est.x) * (nueva / est.esc);
-  est.y = cy - (cy - est.y) * (nueva / est.esc);
-  est.esc = nueva;
-  aplicar();
+function ponerZoom(z) {
+  st.zoom = Math.max(1, Math.min(6, z));
+  if (st.zoom === 1) st.pan = { x: 0, y: 0 };
+  rango.value = Math.round(st.zoom * 100);
+  pintar();
 }
 
-/* ---------- recorte ---------- */
-/* Se recorta lo que quedó dentro del marco, en coordenadas de la imagen
-   original, para no perder resolución. */
 async function recortar() {
-  var r = marco.getBoundingClientRect(), v = visor.getBoundingClientRect();
-  var mx = r.left - v.left, my = r.top - v.top;
-
-  var bmp = await createImageBitmap(est.blob);
-  var girado = (est.giro / 90) % 2 !== 0;
-
+  if (!bmp) bmp = await createImageBitmap(st.blob);
+  var d = dims();
+  var cw = Math.max(40, Math.round((st.rec.x1 - st.rec.x0) * d.w));
+  var ch = Math.max(40, Math.round((st.rec.y1 - st.rec.y0) * d.h));
   var cv = document.createElement("canvas");
-  cv.width = Math.round(r.width / est.esc);
-  cv.height = Math.round(r.height / est.esc);
+  cv.width = cw; cv.height = ch;
   var ctx = cv.getContext("2d");
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, cv.width, cv.height);
-
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cw, ch);
   ctx.save();
-  ctx.translate(-(mx - est.x) / est.esc, -(my - est.y) / est.esc);
-  if (est.giro) {
-    ctx.translate(girado ? bmp.height / 2 : bmp.width / 2,
-                  girado ? bmp.width / 2 : bmp.height / 2);
-    ctx.rotate(est.giro * Math.PI / 180);
-    ctx.translate(-bmp.width / 2, -bmp.height / 2);
+  ctx.translate(-st.rec.x0 * d.w, -st.rec.y0 * d.h);
+  if (st.giro) {
+    ctx.translate(d.w / 2, d.h / 2);
+    ctx.rotate(st.giro * Math.PI / 180);
+    ctx.translate(-st.w / 2, -st.h / 2);
   }
   ctx.drawImage(bmp, 0, 0);
   ctx.restore();
-  if (bmp.close) bmp.close();
-
-  return new Promise(function (res) { cv.toBlob(res, "image/jpeg", 0.92); });
+  return new Promise(function (r) { cv.toBlob(r, "image/jpeg", 0.94); });
 }
 
-/* ---------- punto de entrada ----------
-   Devuelve el Blob a leer, o null si el usuario cerró el visor. */
 function abrir(blob) {
   return new Promise(function (resolver) {
-    est.blob = blob; est.giro = 0; est.resolver = resolver;
+    st.blob = blob; st.giro = 0; st.zoom = 1; st.pan = { x: 0, y: 0 };
+    st.rec = { x0: 0.04, y0: 0.04, x1: 0.96, y1: 0.96 };
+    bmp = null;
+
     var velo = document.getElementById("veloFoto");
+    lienzo = document.getElementById("visor");
     img = document.getElementById("imgVisor");
-    visor = document.getElementById("visor");
     marco = document.getElementById("marco");
     rango = document.getElementById("zoom");
 
+    if (!marco.dataset.listo) { conectarMarco(); conectarZoom(); marco.dataset.listo = "1"; }
+
     var url = URL.createObjectURL(blob);
     img.onload = function () {
-      est.w = img.naturalWidth; est.h = img.naturalHeight;
-      img.style.width = est.w + "px"; img.style.height = est.h + "px";
+      st.w = img.naturalWidth; st.h = img.naturalHeight;
       velo.hidden = false;
-      setTimeout(encajar, 30);
+      rango.min = 100; rango.max = 600; rango.value = 100;
+      setTimeout(pintar, 30);
     };
     img.src = url;
 
-    function cerrar(resultado) {
+    function cerrar(res) {
       velo.hidden = true;
       URL.revokeObjectURL(url);
-      resolver(resultado);
+      if (bmp && bmp.close) bmp.close();
+      bmp = null;
+      resolver(res);
     }
 
     document.getElementById("cerrarFoto").onclick = function () { cerrar(null); };
     document.getElementById("usarTodo").onclick = function () { cerrar(blob); };
     document.getElementById("usarRecorte").onclick = async function () {
       var b = null;
-      try { b = await recortar(); } catch (e) { b = blob; }
+      try { b = await recortar(); } catch (e) {}
       cerrar(b || blob);
     };
-    rango.oninput = function () { zoomA(+this.value); };
-    document.getElementById("zoomMas").onclick = function () {
-      rango.value = Math.min(400, +rango.value + 25); zoomA(+rango.value);
-    };
-    document.getElementById("zoomMenos").onclick = function () {
-      rango.value = Math.max(50, +rango.value - 25); zoomA(+rango.value);
-    };
+    rango.oninput = function () { ponerZoom(+this.value / 100); };
+    document.getElementById("zoomMas").onclick = function () { ponerZoom(st.zoom * 1.25); };
+    document.getElementById("zoomMenos").onclick = function () { ponerZoom(st.zoom / 1.25); };
     document.getElementById("girar").onclick = function () {
-      est.giro = (est.giro + 90) % 360; encajar();
+      st.giro = (st.giro + 90) % 360;
+      st.zoom = 1; st.pan = { x: 0, y: 0 };
+      pintar();
     };
-    conectarGestos();
+    window.addEventListener("resize", pintar);
   });
 }
 
@@ -3068,7 +3164,28 @@ function diligenciar(d, via) {
   var fuente = {xml:"del XML", texto:"del PDF", pdf:"del PDF",
                 qr:"del código QR", ocr:"del texto de la imagen"}[via] || "del soporte";
   toast("Leído " + fuente + ": " + n + " campos.", incierto ? "warn" : "ok");
-  $("#avisoOCR").hidden = !incierto;
+
+  /* Decir QUÉ falta es más útil que decir cuántos campos se leyeron: el
+     usuario sabe exactamente qué revisar sin recorrer el formulario. */
+  var faltan = [];
+  if (!$("#fNit").value) faltan.push("NIT");
+  if (!$("#fProveedor").value) faltan.push("proveedor");
+  if (!$("#fNumero").value) faltan.push("número");
+  if (!$("#fTotal").value) faltan.push("total");
+
+  var av = $("#avisoOCR");
+  av.hidden = !(incierto || faltan.length);
+  if (!av.hidden) {
+    av.innerHTML = incierto
+      ? "Los datos se leyeron del <b>texto de la imagen</b>, no de un código QR. Revise los valores antes de enviar."
+      : "";
+    if (faltan.length) {
+      av.innerHTML += (av.innerHTML ? "<br>" : "") +
+        "No se pudo leer: <b>" + faltan.join(", ") + "</b>. " +
+        (incierto ? "Vuelva a tomar la foto acercando esa parte del documento, o escríbalo a mano."
+                  : "Escríbalo a mano.");
+    }
+  }
   if (!d.proveedor) {
     setTimeout(function () {
       toast("Falta el nombre del proveedor: escríbalo y la app lo recordará.", "warn");
