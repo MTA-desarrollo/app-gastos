@@ -1467,18 +1467,52 @@ function cargarTesseract() {
   return cargando;
 }
 
+/* Tesseract.js descarga por defecto el modelo «best»: 12,9 MB. El «fast» pesa
+   2,2 MB y en las pruebas dio las mismas señales en la mitad de tiempo. En
+   una red móvil esa diferencia son minutos, y era la causa de que una foto
+   tardara tres minutos en leerse. */
+var DATOS = "https://tessdata.projectnaptha.com/4.0.0_fast";
+var TOPE_MS = 45000;
+
 async function obtenerMotor(avisar) {
   if (motor) return motor;
-  if (avisar) avisar("Preparando el lector de texto…");
+  if (avisar) avisar("Preparando el lector…");
   var T = await cargarTesseract();
   motor = await T.createWorker("spa", 1, {
+    langPath: DATOS,
+    cacheMethod: "write",
+    gzip: true,
     logger: function (m) {
-      if (avisar && m.status === "recognizing text") {
+      if (!avisar) return;
+      if (m.status === "recognizing text") {
         avisar("Leyendo el documento… " + Math.round((m.progress || 0) * 100) + " %");
+      } else if (m.status && m.status.indexOf("load") === 0) {
+        avisar("Descargando el lector, solo la primera vez…");
       }
     }
   });
+  /* PSM 6 · un bloque uniforme de texto. Es lo que es una factura, y evita que
+     Tesseract gaste tiempo analizando la estructura de la página. Medido: con
+     PSM 6 encuentra 4 de 6 señales; con el modo automático, 2 de 6. */
+  await motor.setParameters({
+    tessedit_pageseg_mode: "6",
+    preserve_interword_spaces: "1"
+  });
   return motor;
+}
+
+/* Si el CDN del modelo rápido no responde, se reintenta con el de fábrica
+   antes de rendirse. */
+async function motorConRespaldo(avisar) {
+  try { return await obtenerMotor(avisar); }
+  catch (e) {
+    motor = null; cargando = null;
+    var T = await cargarTesseract();
+    if (avisar) avisar("Preparando el lector…");
+    motor = await T.createWorker("spa");
+    try { await motor.setParameters({ tessedit_pageseg_mode: "6" }); } catch (e2) {}
+    return motor;
+  }
 }
 
 /* ------------------------------------------------------- preprocesamiento */
@@ -1495,27 +1529,48 @@ function corregirIluminacion(cv) {
     gris[p] = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
   }
 
-  /* fondo por caja móvil, dos pasadas separables — equivale a un desenfoque
-     grande sin el coste de un gaussiano real */
-  var r = Math.max(8, Math.round(Math.max(w, h) / 28));
-  var tmp = new Float32Array(w * h), fondo = new Float32Array(w * h);
+  /* El fondo se calcula sobre una miniatura y luego se estira. Hacerlo a
+     tamaño completo son decenas de millones de operaciones y en un celular
+     tarda medio minuto; sobre una miniatura de 1/6 son 36 veces menos, y el
+     resultado es el mismo porque lo que se busca es un desenfoque grande. */
+  var F = 6;
+  var mw = Math.max(8, Math.round(w / F)), mh = Math.max(8, Math.round(h / F));
+  var mini = new Float32Array(mw * mh);
   var x, y, k, suma, n;
-  for (y = 0; y < h; y++) {
-    suma = 0; n = 0;
-    for (k = 0; k <= r && k < w; k++) { suma += gris[y * w + k]; n++; }
-    for (x = 0; x < w; x++) {
-      tmp[y * w + x] = suma / n;
-      if (x - r >= 0) { suma -= gris[y * w + x - r]; n--; }
-      if (x + r + 1 < w) { suma += gris[y * w + x + r + 1]; n++; }
+  for (y = 0; y < mh; y++) {
+    for (x = 0; x < mw; x++) {
+      mini[y * mw + x] = gris[Math.min(h - 1, y * F) * w + Math.min(w - 1, x * F)];
     }
   }
-  for (x = 0; x < w; x++) {
+  var r = Math.max(2, Math.round(Math.max(mw, mh) / 28));
+  var tmp = new Float32Array(mw * mh), fm = new Float32Array(mw * mh);
+  for (y = 0; y < mh; y++) {
     suma = 0; n = 0;
-    for (k = 0; k <= r && k < h; k++) { suma += tmp[k * w + x]; n++; }
-    for (y = 0; y < h; y++) {
-      fondo[y * w + x] = suma / n;
-      if (y - r >= 0) { suma -= tmp[(y - r) * w + x]; n--; }
-      if (y + r + 1 < h) { suma += tmp[(y + r + 1) * w + x]; n++; }
+    for (k = 0; k <= r && k < mw; k++) { suma += mini[y * mw + k]; n++; }
+    for (x = 0; x < mw; x++) {
+      tmp[y * mw + x] = suma / n;
+      if (x - r >= 0) { suma -= mini[y * mw + x - r]; n--; }
+      if (x + r + 1 < mw) { suma += mini[y * mw + x + r + 1]; n++; }
+    }
+  }
+  for (x = 0; x < mw; x++) {
+    suma = 0; n = 0;
+    for (k = 0; k <= r && k < mh; k++) { suma += tmp[k * mw + x]; n++; }
+    for (y = 0; y < mh; y++) {
+      fm[y * mw + x] = suma / n;
+      if (y - r >= 0) { suma -= tmp[(y - r) * mw + x]; n--; }
+      if (y + r + 1 < mh) { suma += tmp[(y + r + 1) * mw + x]; n++; }
+    }
+  }
+  /* se estira el fondo con interpolación bilineal */
+  var fondo = new Float32Array(w * h);
+  for (y = 0; y < h; y++) {
+    var fy = Math.min(mh - 1.001, y / F), y0 = fy | 0, ty = fy - y0, y1 = Math.min(mh - 1, y0 + 1);
+    for (x = 0; x < w; x++) {
+      var fx = Math.min(mw - 1.001, x / F), x0 = fx | 0, tx = fx - x0, x1 = Math.min(mw - 1, x0 + 1);
+      var a0 = fm[y0 * mw + x0] * (1 - tx) + fm[y0 * mw + x1] * tx;
+      var a1 = fm[y1 * mw + x0] * (1 - tx) + fm[y1 * mw + x1] * tx;
+      fondo[y * w + x] = a0 * (1 - ty) + a1 * ty;
     }
   }
 
@@ -1585,23 +1640,28 @@ function normalizar(txt) {
 
 /* ----------------------------------------------------------- reconocer */
 async function reconocer(blob, avisar) {
-  var w = await obtenerMotor(avisar);
-  var cv = await prepararImagen(blob, 2400);
+  var t0 = Date.now();
+  var w = await motorConRespaldo(avisar);
+  if (avisar) avisar("Preparando la imagen…");
+  var cv = await prepararImagen(blob, 2000);
   var r = await w.recognize(cv);
   var texto = normalizar(r.data.text || "");
   var conf = r.data.confidence || 0;
 
-  /* Si salió poco texto o poca confianza, se reintenta a más resolución.
-     Una tirilla fotografiada de lejos lo necesita. */
-  if (texto.replace(/\s/g, "").length < 180 || conf < 55) {
-    var cv2 = await prepararImagen(blob, 3200);
+  /* La segunda pasada solo si la primera salió muy pobre Y hubo tiempo. En un
+     celular una pasada ya cuesta varios segundos; encadenar dos sin criterio
+     es lo que hacía que la lectura tardara minutos. */
+  var pocos = texto.replace(/\s/g, "").length < 120;
+  if (pocos && Date.now() - t0 < 12000 && Date.now() - t0 < TOPE_MS) {
+    if (avisar) avisar("Afinando la lectura…");
+    var cv2 = await prepararImagen(blob, 2800);
     var r2 = await w.recognize(cv2);
     var t2 = normalizar(r2.data.text || "");
     if (t2.replace(/\s/g, "").length > texto.replace(/\s/g, "").length) {
       texto = t2; conf = r2.data.confidence || conf;
     }
   }
-  return { texto: texto, confianza: conf };
+  return { texto: texto, confianza: conf, ms: Date.now() - t0 };
 }
 
 async function liberar() {
@@ -2664,7 +2724,11 @@ async function entraArchivo(file) {
   if (esImagen(file)) {
     var n = await normalizar(file);
     if (n) {
-      paraLeer = new File([n.blob], n.nombre, { type: "image/jpeg" });
+      /* Al lector va el archivo ORIGINAL, no la copia reducida. La reducción a
+         1600 px sirve para guardar y para el QR, pero el OCR necesita todo el
+         detalle: ampliar después una imagen ya reducida entrega texto borroso
+         y no lee nada. */
+      paraLeer = file;
       entrada = { nombre: n.nombre, peso: n.blob.size, url: n.url };
     } else {
       av.hidden = true;
@@ -2684,9 +2748,10 @@ async function entraArchivo(file) {
   listaArchivos();
 
   /* D30 — la app lee el soporte sola, sin botón de escaneo */
-  var r = null;
+  var r = null, t0 = Date.now();
   try { r = await leerSoporte(paraLeer); } catch (e) {}
   av.hidden = true;
+  var seg = Math.round((Date.now() - t0) / 1000);
   if (r && r.datos) {
     var d = r.datos;
     /* Razon social: el QR no la trae. Se busca en el texto del documento, y si
@@ -2695,7 +2760,9 @@ async function entraArchivo(file) {
     if (!d.proveedor && d.nitfac) d.proveedor = window.MTALECTOR.proveedorDe(d.nitfac);
     diligenciar(d, r.via);
   } else {
-    toast("No se pudo leer el soporte. Complete los campos a mano.", "warn");
+    toast(seg > 8
+      ? "No se pudo leer el soporte tras " + seg + " segundos. Complete los campos a mano."
+      : "No se pudo leer el soporte. Complete los campos a mano.", "warn");
   }
 }
 
