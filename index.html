@@ -277,8 +277,15 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
 .itxt span{display:block}
 .btn.chico{padding:8px 15px;font-size:13px;flex:none}
 .ix{border:0;background:transparent;color:var(--deep);font-size:21px;cursor:pointer;padding:0 3px;flex:none;opacity:.6}
-.hoja-alta{max-height:92vh;overflow-y:auto}
-.visor{position:relative;width:100%;height:46vh;max-height:400px;overflow:hidden;
+/* En un computador la hoja puede ser mucho más ancha y alta: recortar el NIT
+   de un escaneo con un visor de 400 px es imposible. */
+.hoja-alta{max-height:96vh;overflow-y:auto;max-width:520px}
+@media (min-width:760px){
+  .velo{align-items:center}
+  .hoja-alta{max-width:1000px;border-radius:18px}
+  .visor{height:64vh!important;max-height:none!important}
+}
+.visor{position:relative;width:100%;height:52vh;min-height:300px;overflow:hidden;
        background:#0d1520;border-radius:12px;touch-action:none;cursor:grab}
 .visor:active{cursor:grabbing}
 .visor img{position:absolute;transform-origin:center center;will-change:transform;
@@ -532,6 +539,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
       <button class="cbtn" id="zoomMenos" title="Alejar">&minus;</button>
       <input type="range" id="zoom" min="100" max="400" value="100">
       <button class="cbtn" id="zoomMas" title="Acercar">+</button>
+      <button class="cbtn" id="acercarMarco" title="Acercar al marco">⤢</button>
       <button class="cbtn" id="girar" title="Girar">⟳</button>
     </div>
     <p class="hint" style="text-align:center;margin:7px 0 0">
@@ -1445,8 +1453,14 @@ function emisor(txt, nit) {
 
   if (!cands.length) return "";
   cands.sort(function (a, b) { return b[1] - a[1]; });
+  /* Se deja constancia de la confianza: por debajo de 30 el nombre salió de la
+     primera línea del documento, que en una tirilla es el nombre COMERCIAL del
+     local y no la razón social de la empresa. El usuario tiene que saberlo. */
+  ultimaConfianza = cands[0][1];
   return cands[0][0];
 }
+
+var ultimaConfianza = 0;
 
 /* ---------- punto de entrada ---------- */
 function deRepresentacion(txt) {
@@ -1477,6 +1491,7 @@ function deRepresentacion(txt) {
   /* emisor() trabaja por líneas: se le pasa el texto ORIGINAL, no el que ya
      colapsó los saltos en espacios. */
   d.proveedor = emisor(txt, d.nitfac) || emisor(t, d.nitfac);
+  if (d.proveedor && ultimaConfianza < 30) d.proveedorDudoso = true;
 
   /* IMP exige una cifra con separador o de cuatro dígitos. Sin eso, un
      «IVA(19%) 11%» de la tabla de ítems se confunde con el valor del IVA. */
@@ -1963,7 +1978,12 @@ function conectarMarco() {
 function conectarZoom() {
   var arrastrando = false, px = 0, py = 0;
   lienzo.addEventListener("pointerdown", function (e) {
-    if (e.target === lienzo || e.target === img) { arrastrando = true; px = e.clientX; py = e.clientY; }
+    /* Se arrastra la vista desde cualquier punto que no sea el marco ni sus
+       manijas. Con el marco casi tan grande como el visor, exigir el fondo
+       dejaba sin sitio para agarrar. */
+    if (e.target.classList && e.target.classList.contains("man")) return;
+    if (e.target === marco) return;
+    arrastrando = true; px = e.clientX; py = e.clientY;
   });
   lienzo.addEventListener("pointermove", function (e) {
     if (!arrastrando) return;
@@ -1997,11 +2017,36 @@ function conectarZoom() {
   }, { passive: false });
 }
 
+/* El zoom se centra en el MARCO, no en el centro del visor. Al acercar, lo
+   que interesa es ver mejor lo que se está recortando; centrar en el visor
+   deja el marco fuera de pantalla y obliga a arrastrar a ciegas. */
 function ponerZoom(z) {
-  st.zoom = Math.max(1, Math.min(6, z));
-  if (st.zoom === 1) st.pan = { x: 0, y: 0 };
+  var antes = caja();
+  var cxF = antes.x + (st.rec.x0 + st.rec.x1) / 2 * antes.w;
+  var cyF = antes.y + (st.rec.y0 + st.rec.y1) / 2 * antes.h;
+
+  st.zoom = Math.max(1, Math.min(8, z));
+  if (st.zoom === 1) { st.pan = { x: 0, y: 0 }; }
+  else {
+    var sinPan = { x: st.pan.x, y: st.pan.y };
+    st.pan = { x: 0, y: 0 };
+    var d = caja();
+    var cxD = d.x + (st.rec.x0 + st.rec.x1) / 2 * d.w;
+    var cyD = d.y + (st.rec.y0 + st.rec.y1) / 2 * d.h;
+    st.pan = { x: lienzo.clientWidth / 2 - cxD, y: lienzo.clientHeight / 2 - cyD };
+  }
   rango.value = Math.round(st.zoom * 100);
   pintar();
+}
+
+/* Encaja el marco en la vista: lo acerca hasta que llene el visor. Es el atajo
+   para revisar de cerca lo que se va a leer. */
+function acercarAlMarco() {
+  var aw = st.rec.x1 - st.rec.x0, ah = st.rec.y1 - st.rec.y0;
+  var d = dims(), vw = lienzo.clientWidth, vh = lienzo.clientHeight;
+  var base = Math.min(vw / d.w, vh / d.h);
+  var z = Math.min(vw / (d.w * aw * base), vh / (d.h * ah * base)) * 0.92;
+  ponerZoom(Math.max(1, Math.min(8, z)));
 }
 
 async function recortar() {
@@ -2066,6 +2111,8 @@ function abrir(blob) {
     rango.oninput = function () { ponerZoom(+this.value / 100); };
     document.getElementById("zoomMas").onclick = function () { ponerZoom(st.zoom * 1.25); };
     document.getElementById("zoomMenos").onclick = function () { ponerZoom(st.zoom / 1.25); };
+    var bAcercar = document.getElementById("acercarMarco");
+    if (bAcercar) bAcercar.onclick = acercarAlMarco;
     document.getElementById("girar").onclick = function () {
       st.giro = (st.giro + 90) % 360;
       st.zoom = 1; st.pan = { x: 0, y: 0 };
@@ -3208,34 +3255,43 @@ function diligenciar(d, via) {
 
   /* Decir QUÉ falta es más útil que decir cuántos campos se leyeron: el
      usuario sabe exactamente qué revisar sin recorrer el formulario. */
-  var faltan = [];
+  var faltan = [], dudosos = [];
   if (!$("#fNit").value) faltan.push("NIT");
   if (!$("#fProveedor").value) faltan.push("proveedor");
   if (!$("#fNumero").value) faltan.push("número");
   if (!$("#fTotal").value) faltan.push("total");
+  /* Un campo puede estar lleno y aun así ser poco confiable: en una tirilla, el
+     nombre que se lee arriba suele ser el del ESTABLECIMIENTO y no la razón
+     social. Decirlo evita que pase a contabilidad un dato equivocado. */
+  if (d.proveedorDudoso && $("#fProveedor").value) {
+    dudosos.push("el proveedor podría ser el nombre del establecimiento y no la razón social");
+  }
 
   var av = $("#avisoOCR");
-  av.hidden = !(incierto || faltan.length);
+  av.hidden = !(incierto || faltan.length || dudosos.length);
   if (!av.hidden) {
     av.innerHTML = incierto
       ? "Los datos se leyeron del <b>texto de la imagen</b>, no de un código QR. Revise los valores antes de enviar."
       : "";
+    if (dudosos.length) {
+      av.innerHTML += (av.innerHTML ? "<br>" : "") + "Verifique: " + dudosos.join("; ") + ".";
+    }
     if (faltan.length) {
       av.innerHTML += (av.innerHTML ? "<br>" : "") +
         "No se pudo leer: <b>" + faltan.join(", ") + "</b>.";
-      /* Si la lectura vino de una imagen —foto, escaneo o PDF rasterizado—, el
-         usuario puede recortar la zona que falta y releer sin volver a
-         adjuntar nada. Es lo que rescata el NIT de un escaneo con anotaciones
-         encima o con el encabezado pequeño. */
-      if (incierto && window.MTAIMAGEN && window.MTAVISOR) {
-        av.innerHTML += ' <button class="mini" id="releer">Recortar y volver a leer</button>';
-        setTimeout(function () {
-          var b = document.getElementById("releer");
-          if (b) b.onclick = recortarYReleer;
-        }, 0);
-      } else {
-        av.innerHTML += " Escríbalo a mano.";
-      }
+    }
+    /* Si la lectura vino de una imagen —foto, escaneo o PDF rasterizado—, el
+       usuario puede recortar la zona con los datos y releer sin volver a
+       adjuntar nada. Es lo que rescata el NIT de un escaneo con anotaciones
+       encima o con el encabezado pequeño. */
+    if (incierto && window.MTAIMAGEN && window.MTAVISOR && (faltan.length || dudosos.length)) {
+      av.innerHTML += ' <button class="mini" id="releer">Recortar y volver a leer</button>';
+      setTimeout(function () {
+        var b = document.getElementById("releer");
+        if (b) b.onclick = recortarYReleer;
+      }, 0);
+    } else if (faltan.length) {
+      av.innerHTML += " Escríbalo a mano.";
     }
   }
   if (!d.proveedor) {
@@ -3342,7 +3398,12 @@ async function recortarYReleer() {
   var n = 0;
   Object.keys(mapa).forEach(function (id) {
     var v = r.datos[mapa[id]];
-    if (v && !$("#" + id).value) { $("#" + id).value = v; $("#" + id).classList.add("auto-ocr"); n++; }
+    if (!v) return;
+    var e = $("#" + id);
+    /* El proveedor sí se reemplaza si el recorte trajo uno más confiable: el
+       primero venía del nombre del local. */
+    var pisar = !e.value || (id === "fProveedor" && !r.datos.proveedorDudoso);
+    if (pisar) { e.value = v; e.classList.add("auto-ocr"); n++; }
   });
   if (r.datos.fecfac && !$("#fFecha").value) { $("#fFecha").value = r.datos.fecfac; n++; }
 
