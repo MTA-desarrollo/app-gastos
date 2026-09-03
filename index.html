@@ -316,6 +316,9 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
 .cbtn:active{background:var(--brass-soft)}
 .diag{font-family:"Source Code Pro",ui-monospace,monospace;font-size:11px;line-height:1.5;
       white-space:pre-wrap;background:var(--paper-2)}
+/* Con el visor abierto se bloquea el desplazamiento de fondo: en iPhone el
+   rebote de la página se lleva el gesto de arrastrar el marco. */
+body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
 .velo{position:fixed;inset:0;z-index:70;background:rgba(10,20,32,.6);
       display:flex;align-items:flex-end;justify-content:center;
       backdrop-filter:blur(3px);animation:aparece .2s ease}
@@ -1949,6 +1952,11 @@ function conectarMarco() {
   marco.addEventListener("pointerdown", function (e) {
     if (e.target === marco) empezar(e, "mover");
   });
+  /* Safari en iPhone dispara los eventos de puntero, pero el gesto de arrastre
+     compite con el desplazamiento de la página si no se cancela. */
+  marco.addEventListener("touchmove", function (e) {
+    if (e.touches.length === 1) e.preventDefault();
+  }, { passive: false });
 
   lienzo.addEventListener("pointermove", function (ev) {
     if (!activo) return;
@@ -3077,9 +3085,6 @@ function aplicarRol() {
 function ir(p) {
   var v = M.pantallasDe(M.usuario().Rol);
   if (v.indexOf(p) < 0) p = v[0];
-  /* Al volver a Home la pantalla queda limpia: los datos de la captura
-     anterior no deben mezclarse con el gasto nuevo. */
-  if (p === "home" && pantalla !== "home") { archivos = []; limpiar(); }
   pantalla = p;
   $$(".pane").forEach(function (x) { x.hidden = true; });
   $("#pane-" + p).hidden = false;
@@ -3409,6 +3414,24 @@ async function recortarYReleer() {
 
   toast(n ? "Se completaron " + n + " campos con el recorte."
           : "El recorte no aportó campos nuevos.", n ? "ok" : "warn");
+}
+
+/* Deja la pantalla de captura como recién abierta. La usan el botón Home y el
+   guardado, para que nunca queden datos del soporte anterior. */
+function nuevoGasto() {
+  var habia = archivos.length || $("#fTotal").value || $("#fNumero").value ||
+              $("#fProveedor").value || $("#fNit").value;
+  archivos = [];
+  limpiar();
+  listaArchivos();
+  window.MTAIMAGEN = null;
+  window.MTAULTIMO = null;
+  window.MTAERROR = null;
+  ir("home");
+  /* Safari en iOS 15 y anteriores no acepta el objeto con «behavior»: hay que
+     dejar preparada la forma antigua. */
+  try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { try { window.scrollTo(0, 0); } catch (e2) {} }
+  if (habia) toast("Pantalla lista para un gasto nuevo.");
 }
 
 function limpiarLectura() {
@@ -3765,7 +3788,15 @@ function arrancar() {
   };
 
   pintarCaptura();
-  $$(".tab").forEach(function (b) { b.onclick = function () { ir(b.dataset.p); }; });
+  /* Tocar Home deja la pantalla lista para un gasto nuevo, incluso si ya se
+     estaba en Home. Con la condición «solo si venía de otra pestaña», en el
+     celular el botón no hacía nada: es donde el usuario más lo necesita. */
+  $$(".tab").forEach(function (b) {
+    b.onclick = function () {
+      if (b.dataset.p === "home") nuevoGasto();
+      else ir(b.dataset.p);
+    };
+  });
   $("#btnFoto").onclick = function () { $("#inFoto").click(); };
   $("#btnArchivo").onclick = function () { $("#inArchivo").click(); };
   $("#inFoto").onchange = async function () {
