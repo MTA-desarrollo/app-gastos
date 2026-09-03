@@ -519,6 +519,7 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
   </div>
 
   <div class="btns">
+    <button class="btn sec" id="btnNuevo" title="Vaciar la pantalla">Empezar de nuevo</button>
     <button class="btn sec" id="btnGuardar">Guardar borrador</button>
     <button class="btn pri" id="btnEnviar">Enviar a aprobación</button>
   </div>
@@ -3178,7 +3179,20 @@ function listaArchivos() {
       (a.url ? '<img src="' + a.url + '" alt="">' : '<div class="fpdf">PDF</div>') +
       '<div class="fmeta"><b>' + esc(a.nombre) + "</b><span>" + (a.peso / 1024).toFixed(0) + " KB</span></div>" +
       '<button class="fx" title="Quitar">&times;</button>';
-    f.querySelector(".fx").onclick = function () { archivos.splice(i, 1); listaArchivos(); };
+    f.querySelector(".fx").onclick = function () {
+      archivos.splice(i, 1);
+      listaArchivos();
+      /* Quitar el soporte también borra lo que se leyó de él. Dejar los datos
+         de un archivo que ya no está es lo que hacía parecer que la app no
+         limpiaba: el usuario quitaba el adjunto equivocado y los campos
+         seguían llenos. */
+      if (!archivos.length) {
+        limpiarLectura();
+        window.MTAIMAGEN = null;
+        window.MTAPDFBYTES = null;
+        toast("Soporte quitado. Los datos leídos se borraron.");
+      }
+    };
     c.appendChild(f);
   });
 }
@@ -3505,6 +3519,25 @@ async function recortarYReleer() {
 
   if (n) toast("Se completaron " + n + " campos con el recorte.", "ok");
   else toast("El recorte no aportó campos nuevos. Vea el texto leído en Bitácora.", "warn");
+}
+
+/* Deja la pantalla de captura como recién abierta. La usan el botón Home, el
+   botón «Empezar de nuevo» y la X del soporte, para que nunca queden datos de
+   un archivo anterior. */
+function nuevoGasto() {
+  var habia = archivos.length || $("#fTotal").value || $("#fNumero").value ||
+              $("#fProveedor").value || $("#fNit").value;
+  archivos = [];
+  limpiar();
+  listaArchivos();
+  window.MTAIMAGEN = null;
+  window.MTAPDFBYTES = null;
+  window.MTAULTIMO = null;
+  window.MTAERROR = null;
+  ir("home");
+  try { window.scrollTo({ top: 0, behavior: "smooth" }); }
+  catch (e) { try { window.scrollTo(0, 0); } catch (e2) {} }
+  if (habia) toast("Pantalla lista para un gasto nuevo.");
 }
 
 function limpiarLectura() {
@@ -3909,6 +3942,7 @@ function arrancar() {
   };
   $("#fConcepto").onchange = ajustarIVA;
   $("#fTipo").onchange = ajustarIVA;
+  $("#btnNuevo").onclick = nuevoGasto;
   $("#btnGuardar").onclick = function () { guardarGasto(false); };
   $("#btnEnviar").onclick = function () { guardarGasto(true); };
   $("#btnConsol").onclick = function () {
