@@ -52,43 +52,57 @@
 :focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:6px}
 body{margin:0;background:var(--ground);color:var(--ink);
      font:15px/1.55 "Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
-     -webkit-font-smoothing:antialiased;padding-bottom:78px}
+     -webkit-font-smoothing:antialiased;padding-bottom:74px}
 .wrap{max-width:760px;margin:0 auto;padding:0 14px}
 h1{font-size:20px;font-weight:600;letter-spacing:-.01em;margin:0}
 h2{font-size:17px;font-weight:600;letter-spacing:-.01em;margin:0 0 3px}
 .num,.n{font-family:"Source Code Pro",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 
+/* Cabecera de una sola linea. Antes ocupaba 54 px y en el celular el titulo se
+   partia en dos renglones porque el selector de usuario le comia el ancho. */
 header{position:sticky;top:0;z-index:30;
   background:linear-gradient(180deg,var(--deep) 0%,var(--deeper) 100%);
   box-shadow:0 1px 0 rgba(255,255,255,.06) inset, 0 2px 10px rgba(0,61,102,.28)}
-.hrow{display:flex;align-items:center;gap:11px;padding:13px 0}
-header h1{color:#fff}
-.logo{display:flex;align-items:center;gap:8px;flex:none;
-      font-weight:700;font-size:17px;letter-spacing:.07em;color:#fff}
-.logo::before{content:"";width:4px;height:27px;background:var(--brass);border-radius:2px;
-              box-shadow:0 0 12px rgba(0,119,192,.6)}
+.hrow{display:flex;align-items:center;gap:8px;padding:7px 0}
+header h1{color:#fff;font-size:15px;font-weight:600;white-space:nowrap;
+          overflow:hidden;text-overflow:ellipsis}
+.htit{min-width:0;flex:0 0 auto}
+.logo{display:flex;align-items:center;gap:6px;flex:none;
+      font-weight:700;font-size:14px;letter-spacing:.06em;color:#fff}
+.logo::before{content:"";width:3px;height:19px;background:var(--brass);border-radius:2px;
+              box-shadow:0 0 10px rgba(0,119,192,.6)}
 
-.hsp{flex:1}
+.hsp{flex:1 1 auto;min-width:4px}
 select,input,textarea{font:inherit;color:inherit;background:var(--paper-2);
   border:1px solid var(--line);border-radius:9px;padding:10px 11px;width:100%;
   transition:border-color .12s, box-shadow .12s}
 select:focus,input:focus,textarea:focus{outline:none;border-color:var(--brass);
   box-shadow:0 0 0 3px rgba(0,119,192,.15)}
 input:disabled{opacity:.5}
-#usuario{width:auto;max-width:210px;font-size:12.5px;padding:7px 10px;
-  background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#fff;
-  border-radius:8px}
+#usuario{width:auto;max-width:43vw;flex:0 1 auto;min-width:0;
+  font-size:11.5px;padding:5px 26px 5px 9px;
+  background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.24);color:#fff;
+  border-radius:8px;text-overflow:ellipsis}
 #usuario option{color:var(--ink);background:var(--paper)}
+@media(min-width:560px){#usuario{max-width:280px;font-size:12.5px;padding:6px 10px}}
 
-.pane{padding:16px 0 8px}
-.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px;
-      margin-bottom:12px;box-shadow:var(--sombra)}
-.tit{font-size:12px;letter-spacing:0;color:var(--deep);font-weight:600;margin:0 0 11px}
+.pane{padding:10px 0 8px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:13px;padding:12px;
+      margin-bottom:9px;box-shadow:var(--sombra)}
+.tit{font-size:12px;letter-spacing:0;color:var(--deep);font-weight:600;margin:0 0 8px}
+/* Titulo de tarjeta con una accion pequena a la derecha */
+.cabcard{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px}
+.cabcard .tit{margin:0}
+.btn-lim{border:1px solid var(--line);background:var(--paper-2);color:var(--slate);
+         border-radius:7px;padding:4px 10px;font:inherit;font-size:11px;font-weight:600;
+         cursor:pointer;flex:none;white-space:nowrap}
+.btn-lim:active{background:var(--brass-soft);color:var(--deep);border-color:var(--brass)}
 
 .dos{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .tres{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
-label.f{display:block;margin-bottom:9px}
-label.f > span{display:block;font-size:12px;color:var(--slate);margin-bottom:5px;font-weight:500}
+label.f{display:block;margin-bottom:7px}
+label.f > span{display:block;font-size:11.5px;color:var(--slate);margin-bottom:4px;font-weight:500}
+select,input,textarea{padding:8px 10px}
 .auto{background:var(--brass-soft)!important;border-color:var(--brass)!important;color:var(--ink)}
 /* Los campos leídos por OCR se marcan distinto: el OCR interpreta píxeles y
    puede equivocarse en un dígito. El usuario debe verificarlos. */
@@ -101,16 +115,25 @@ label.f > span{display:block;font-size:12px;color:var(--slate);margin-bottom:5px
 .chk input{width:auto}
 .hint{font-size:11.5px;color:var(--faint);margin:-4px 0 9px}
 
-.dropzone{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.drop{border:1.5px solid var(--brass-soft);border-radius:13px;background:var(--brass-soft);
-      padding:21px 10px;text-align:center;cursor:pointer;
+/* Mas bajos que antes -de 74 a 48 px- pero conservan el color de marca, el
+   borde y el tamano del icono, que es lo que los mantiene como el punto de
+   entrada evidente de la pantalla. */
+.dropzone{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.drop{border:1.5px solid var(--brass-soft);border-radius:11px;background:var(--brass-soft);
+      padding:9px 8px;cursor:pointer;display:grid;grid-template-columns:auto 1fr;
+      gap:7px;align-items:center;text-align:left;
       transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease}
 .drop:hover{border-color:var(--brass);box-shadow:0 4px 16px rgba(0,119,192,.18)}
 .drop:active{transform:scale(.985)}
-.drop b{display:block;font-size:14px;margin-top:7px;color:var(--deep)}
-.drop span{font-size:11.5px;color:var(--brass);opacity:.8}
-.drop svg{width:27px;height:27px;stroke:var(--brass);fill:none;stroke-width:1.7}
-#listaFiles{display:flex;flex-direction:column;gap:7px;margin-top:11px}
+.drop div{min-width:0}
+.drop b{display:block;font-size:12.5px;color:var(--deep);line-height:1.2;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drop span{display:block;font-size:10px;color:var(--brass);opacity:.85;line-height:1.25;
+           white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drop svg{width:22px;height:22px;stroke:var(--brass);fill:none;stroke-width:1.7;flex:none}
+@media(min-width:420px){.drop b{font-size:13.5px}.drop span{font-size:10.5px}}
+#listaFiles{display:flex;flex-direction:column;gap:7px;margin-top:9px}
+#listaFiles:empty{margin-top:0}
 .file{display:flex;align-items:center;gap:10px;background:var(--paper-2);
       border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .file img{width:38px;height:38px;object-fit:cover;border-radius:7px;flex:none}
@@ -121,9 +144,10 @@ label.f > span{display:block;font-size:12px;color:var(--slate);margin-bottom:5px
 .fmeta span{font-size:10.5px;color:var(--faint)}
 .fx{border:0;background:transparent;color:var(--faint);font-size:19px;cursor:pointer;padding:0 5px}
 .vacio{color:var(--faint);font-size:13px;text-align:center;padding:22px 0;margin:0}
+#sinFiles{padding:8px 0 0;font-size:11.5px}
 
 #leyendo{display:flex;align-items:center;gap:9px;background:var(--brass-soft);color:var(--deep);
-  border-radius:10px;padding:10px 13px;font-size:12.5px;font-weight:600;margin-top:11px;
+  border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:600;margin-top:9px;
   border:1px solid rgba(0,119,192,.2)}
 .spin{width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;
       border-radius:50%;animation:g .7s linear infinite}
@@ -133,7 +157,9 @@ label.f > span{display:block;font-size:12px;color:var(--slate);margin-bottom:5px
        border-radius:10px;padding:10px 13px;font-size:12.5px;font-weight:500;margin-top:9px;
        line-height:1.5}
 .totrow{display:flex;justify-content:space-between;align-items:baseline;
-        border-top:1px solid var(--line);margin-top:9px;padding-top:9px;font-size:12.5px;color:var(--slate)}
+        border-top:1px solid var(--line);margin-top:7px;padding-top:7px;font-size:12.5px;color:var(--slate)}
+.tres{gap:8px}
+#pane-home .hint{font-size:11px;margin:-2px 0 7px}
 
 .btns{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:4px}
 .btn{border:0;border-radius:10px;padding:12px;font:inherit;font-weight:600;font-size:14px;cursor:pointer}
@@ -219,8 +245,6 @@ label.f > span{display:block;font-size:12px;color:var(--slate);margin-bottom:5px
 .tab-g .mot{display:block;font-style:normal;font-size:10.5px;color:var(--err);margin-top:4px;max-width:190px}
 .tab-g .mini{margin:5px 0 0;padding:4px 9px;font-size:11px}
 .tab-g tfoot td{background:var(--paper-2);font-weight:600;border-top:1.5px solid var(--line);border-bottom:0}
-nav.pocas .tab{max-width:150px}
-nav.pocas{justify-content:center;gap:6px}
 .tabla{border-top:1px solid var(--line);margin:8px 0}
 .tr{display:grid;grid-template-columns:1fr auto auto auto;gap:9px;padding:6px 0;
     border-bottom:1px solid var(--line);font-size:12px;font-family:"Source Code Pro",ui-monospace,monospace}
@@ -236,14 +260,45 @@ nav.pocas{justify-content:center;gap:6px}
 .ev .eo{margin-left:auto;font-size:10.5px;letter-spacing:.01em}
 .ev .ed{flex-basis:100%;color:var(--slate)}
 
+/* La barra inferior lleva las pestanas Y las dos acciones del formulario, que
+   es donde el pulgar ya esta. Con mas de tres pestanas se compacta sola: las
+   pestanas pasan a icono y los botones a su rotulo corto. */
 nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
     border-top:1px solid var(--line);box-shadow:0 -2px 14px rgba(16,42,67,.07);
-    display:flex;z-index:40;padding:5px 4px;padding-bottom:calc(5px + env(safe-area-inset-bottom))}
-.tab{flex:1;border:0;background:transparent;color:var(--faint);font:inherit;font-size:10px;
-     font-weight:600;padding:7px 2px 6px;cursor:pointer;display:flex;flex-direction:column;
-     align-items:center;gap:4px;border-radius:10px;transition:background .14s,color .14s}
-.tab svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7}
+    display:flex;align-items:stretch;justify-content:center;gap:4px;z-index:40;
+    padding:5px 6px;padding-bottom:calc(5px + env(safe-area-inset-bottom))}
+.tab{flex:0 0 auto;min-width:56px;max-width:118px;border:0;background:transparent;color:var(--faint);
+     font:inherit;font-weight:600;padding:6px 4px 5px;cursor:pointer;display:flex;
+     flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:10px;
+     transition:background .14s,color .14s}
+.tab svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;flex:none}
+.tab .tl{font-style:normal;font-size:9.5px;line-height:1;white-space:nowrap;
+         overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .tab.on{color:var(--brass);background:var(--brass-soft)}
+
+.navacc{display:flex;gap:6px;flex:1 1 auto;min-width:0}
+/* min-width:max-content impide que el rotulo se aplaste: la barra se desborda de
+   verdad y ajustarBarra() lo detecta y pasa al modo compacto. */
+.navacc .btn{flex:1 1 auto;min-width:max-content;padding:0 12px;font-size:12.5px;border-radius:10px;
+             display:flex;align-items:center;justify-content:center;text-align:center;
+             line-height:1.15;white-space:nowrap}
+.navacc .btn.sec{background:var(--paper-2)}
+.corto{display:none}
+/* Tres escalones, del mas comodo al mas apretado. ajustarBarra() mide y baja
+   solo lo necesario, asi el originador conserva sus etiquetas y el rol Todos
+   -siete pestanas mas dos acciones- sigue cabiendo en un telefono. */
+nav.corta .largo,
+nav.compacta .largo{display:none}
+nav.corta .corto,
+nav.compacta .corto{display:inline}
+nav.compacta{gap:3px;padding:5px 4px;padding-bottom:calc(5px + env(safe-area-inset-bottom))}
+nav.compacta .tab{flex:1 1 0;min-width:0;max-width:46px;padding:8px 1px}
+nav.compacta .tab .tl{display:none}
+nav.compacta .tab svg{width:18px;height:18px}
+nav.compacta .navacc{flex:0 1 auto;gap:4px}
+nav.compacta .navacc .btn{flex:0 1 auto;min-width:0;padding:0 8px;font-size:11.5px;
+                          overflow:hidden;text-overflow:ellipsis;display:block;
+                          line-height:34px}
 .badge{position:absolute;top:5px;margin-left:20px;background:var(--err);color:#fff;
        border-radius:9px;font-size:9px;padding:1px 5px;font-weight:700}
 
@@ -266,7 +321,6 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--paper);
 .rc span{color:var(--slate);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rc i{font-style:normal;font-size:11px;color:var(--faint)}
 .rc b:last-child{font-family:"Source Code Pro",ui-monospace,monospace;font-variant-numeric:tabular-nums}
-.tab{font-size:9px}
 .instalar{position:sticky;top:57px;z-index:29;background:var(--brass-soft);
           border-bottom:1px solid rgba(0,119,192,.28)}
 .ibar{display:flex;align-items:center;gap:11px;padding:10px 14px}
@@ -373,7 +427,7 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
 <header>
  <div class="wrap hrow">
    <div class="logo">MTA</div>
-   <div><h1>App de Gastos</h1></div>
+   <div class="htit"><h1>App de Gastos</h1></div>
    <div class="hsp"></div>
    <select id="usuario" title="Usuario de prueba"></select>
  </div>
@@ -459,15 +513,18 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
 <!-- ============ CAPTURA ============ -->
 <section class="pane" id="pane-home">
   <div class="card">
-    <p class="tit">Soporte del gasto</p>
+    <div class="cabcard">
+      <p class="tit">Soporte del gasto</p>
+      <button class="btn-lim" id="btnNuevo" title="Vaciar la pantalla y empezar un gasto nuevo">Limpiar datos</button>
+    </div>
     <div class="dropzone">
       <div class="drop" id="btnFoto">
         <svg viewBox="0 0 24 24"><path d="M3 8a2 2 0 012-2h2l1.5-2h7L17 6h2a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="12.5" r="3.2"/></svg>
-        <b>Tomar foto</b><span>Cámara del dispositivo</span>
+        <div><b>Tomar foto</b><span>Cámara del dispositivo</span></div>
       </div>
       <div class="drop" id="btnArchivo">
         <svg viewBox="0 0 24 24"><path d="M13 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V9z"/><path d="M13 3v6h6"/></svg>
-        <b>Adjuntar archivo</b><span>PDF, XML o imagen</span>
+        <div><b>Adjuntar archivo</b><span>PDF, XML o imagen</span></div>
       </div>
     </div>
     <input type="file" id="inFoto" accept="image/*" capture="environment" multiple hidden>
@@ -479,6 +536,19 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
     </div>
     <div id="listaFiles"></div>
     <p class="vacio" id="sinFiles">Todo gasto exige al menos una foto o un archivo.</p>
+  </div>
+
+  <div class="card">
+    <p class="tit">Valores</p>
+    <p class="hint">«Otros» reúne todo lo que no es base ni IVA: impuesto al consumo, propina, servicio.</p>
+    <div class="tres">
+      <label class="f"><span>Base</span><input id="fBase" inputmode="decimal" class="num moneda"></label>
+      <label class="f"><span>IVA</span><input id="fIva" inputmode="decimal" class="num moneda"></label>
+      <label class="f"><span>Otros</span><input id="fOtros" inputmode="decimal" class="num moneda"></label>
+    </div>
+    <label class="f"><span>Valor total del soporte</span><input id="fTotal" inputmode="decimal" class="num moneda"></label>
+    <div class="totrow"><span>Suma de los componentes</span><b class="num" id="calc">$ 0</b></div>
+    <div class="aviso" id="avisoDif" hidden></div>
   </div>
 
   <div class="card">
@@ -497,19 +567,6 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
   </div>
 
   <div class="card">
-    <p class="tit">Valores</p>
-    <p class="hint">«Otros» reúne todo lo que no es base ni IVA: impuesto al consumo, propina, servicio.</p>
-    <div class="tres">
-      <label class="f"><span>Base</span><input id="fBase" inputmode="decimal" class="num moneda"></label>
-      <label class="f"><span>IVA</span><input id="fIva" inputmode="decimal" class="num moneda"></label>
-      <label class="f"><span>Otros</span><input id="fOtros" inputmode="decimal" class="num moneda"></label>
-    </div>
-    <label class="f"><span>Valor total del soporte</span><input id="fTotal" inputmode="decimal" class="num moneda"></label>
-    <div class="totrow"><span>Suma de los componentes</span><b class="num" id="calc">$ 0</b></div>
-    <div class="aviso" id="avisoDif" hidden></div>
-  </div>
-
-  <div class="card">
     <p class="tit">Clasificación</p>
     <label class="f"><span>Concepto</span><select id="fConcepto"></select></label>
     <p class="hint" id="hintConcepto"></p>
@@ -518,11 +575,6 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
       <textarea id="fDesc" rows="2"></textarea></label>
   </div>
 
-  <div class="btns">
-    <button class="btn sec" id="btnNuevo" title="Vaciar la pantalla">Empezar de nuevo</button>
-    <button class="btn sec" id="btnGuardar">Guardar borrador</button>
-    <button class="btn pri" id="btnEnviar">Enviar a aprobación</button>
-  </div>
 </section>
 
 <!-- Visor de la foto. Recortar el área útil antes de leer sube el acierto del
@@ -633,13 +685,17 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
 </main>
 
 <nav>
-  <button class="tab on" data-p="home"><svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 001 1h12a1 1 0 001-1V9.5"/></svg>Home</button>
-  <button class="tab" data-p="mis"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>Mis gastos</button>
-  <button class="tab" data-p="aprob"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Aprobar</button>
-  <button class="tab" data-p="consol"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg>Reembolsos</button>
-  <button class="tab" data-p="final"><svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>Final</button>
-  <button class="tab" data-p="conta"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Contab.</button>
-  <button class="tab" data-p="bitacora"><svg viewBox="0 0 24 24"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>Bitácora</button>
+  <button class="tab on" data-p="home"><svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 001 1h12a1 1 0 001-1V9.5"/></svg><i class="tl">Home</i></button>
+  <button class="tab" data-p="mis"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg><i class="tl">Mis gastos</i></button>
+  <button class="tab" data-p="aprob"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg><i class="tl">Aprobar</i></button>
+  <button class="tab" data-p="consol"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg><i class="tl">Reembolsos</i></button>
+  <button class="tab" data-p="final"><svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg><i class="tl">Final</i></button>
+  <button class="tab" data-p="conta"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><i class="tl">Contab.</i></button>
+  <button class="tab" data-p="bitacora"><svg viewBox="0 0 24 24"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg><i class="tl">Bitácora</i></button>
+  <div class="navacc" id="navAcc">
+    <button class="btn sec" id="btnGuardar"><span class="largo">Guardar borrador</span><span class="corto">Borrador</span></button>
+    <button class="btn pri" id="btnEnviar"><span class="largo">Enviar a aprobación</span><span class="corto">Enviar</span></button>
+  </div>
 </nav>
 
 <div class="toast" id="toast"></div>
@@ -1098,8 +1154,22 @@ var ROTULOS = [
   /emisor\s*:?\s*([^\n\r|]{4,90})/i,
   /facturador\s*(?:electr[oó]nico)?\s*:?\s*([^\n\r|]{4,90})/i,
   /vendedor\s*:?\s*([^\n\r|]{4,90})/i,
-  /proveedor\s*:?\s*([^\n\r|]{4,90})/i
+  /(?<!tecnol[oó]gico\s)proveedor(?!\s*tecnol)\s*:?\s*([^\n\r|]{4,90})/i
 ];
+
+/* Al pie de toda factura electronica va el PROVEEDOR TECNOLOGICO, que no es el
+   emisor. El rotulo «Proveedor:» lo capturaba y entregaba «tecnologico: Comercio
+   Electronico en Internet CENET S.A.». lector_repre ya los descartaba; esta via
+   no, y es la que usa la interfaz cuando la primera no encuentra nombre. */
+var TECNOLOGICOS_LP = /CENET|misfacturas|Carvajal|Facture|Siesa|Alegra|Siigo|World Office|Olimpia|Certicamara|eFactura|Gosocket|Facturatech|Datico|Cadena|Delcop|SISTEMAS DE INFORMACI[OÓ]N|SOLUCIONES INFORM[AÁ]TICAS|E-?Invoic|SOFTWARE|tecnol[oó]gico/i;
+var NIT_MTA_LP = "830034264";
+
+/* El texto que llega puede traer el pie tecnologico pegado. Se corta ahi: nada
+   de lo que viene despues es el emisor. */
+function sinPieTecnologico(t) {
+  var i = String(t).search(/Proveedor\s+tecnol[oó]gico|Fabricante\s+del\s+Software|Software\s*:/i);
+  return (i > 120) ? String(t).substring(0, i) : String(t);
+}
 
 var BASURA = /^(nit|c\.?c\.?|cufe|factura|fecha|valor|total|iva|direcci|tel|email|correo|cliente|adquirente|comprador|resoluci|r[ée]gimen|regimen|documento|tiquete|recibo|comprobante|cuenta de cobro|orden|pedido|subtotal|descuento|forma de pago|medio de pago|moneda|observaci|detalle|concepto|cantidad|descripci|autorretenedor|contribuyente|responsable)/i;
 
@@ -1138,6 +1208,7 @@ function puntuar(v, origen) {
 
 function razonSocial(txt, nit) {
   if (!txt) return "";
+  txt = sinPieTecnologico(txt);
   var cands = [], i, m, v;
 
   for (i = 0; i < ROTULOS.length; i++) {
@@ -1160,6 +1231,13 @@ function razonSocial(txt, nit) {
     if (m) { v = limpiar(m[1]); if (v) cands.push([v, "vecino"]); }
   }
 
+  /* Fuera el proveedor tecnologico, MTA y lo que sea solo digitos */
+  cands = cands.filter(function (c) {
+    if (TECNOLOGICOS_LP.test(c[0])) return false;
+    if (/MU[NÑ]OZ TAMAYO|ASOCIADOS ABOGADOS/i.test(c[0])) return false;
+    if (String(c[0]).replace(/\D/g, "") === NIT_MTA_LP) return false;
+    return true;
+  });
   if (!cands.length) return "";
   cands.sort(function (a, b) { return puntuar(b[0], b[1]) - puntuar(a[0], a[1]); });
   return puntuar(cands[0][0], cands[0][1]) > 0 ? cands[0][0] : "";
@@ -3153,9 +3231,23 @@ function primeraPantalla() {
 function aplicarRol() {
   var v = M.pantallasDe(M.usuario().Rol);
   $$(".tab").forEach(function (b) { b.hidden = v.indexOf(b.dataset.p) < 0; });
-  var nav = $("nav");
-  nav.classList.toggle("pocas", v.length <= 3);
   if (v.indexOf(pantalla) < 0) ir(v[0]);
+  ajustarBarra();
+}
+
+/* La barra inferior lleva las pestanas y las dos acciones del formulario. Si con
+   las etiquetas completas no caben en una fila, pasa a iconos y a los rotulos
+   cortos. Se MIDE en vez de suponer: lo que cabe depende del rol, del largo de
+   cada rotulo y del ancho del telefono, y suponerlo dejaba las pestanas
+   aplastadas a una letra. */
+function ajustarBarra() {
+  var nav = $("nav");
+  if (!nav) return;
+  nav.classList.remove("corta", "compacta");
+  if (nav.scrollWidth <= nav.clientWidth + 1) return;
+  nav.classList.add("corta");          /* «Borrador» y «Enviar» */
+  if (nav.scrollWidth <= nav.clientWidth + 1) return;
+  nav.classList.add("compacta");       /* y las pestanas a icono */
 }
 
 function ir(p) {
@@ -3171,6 +3263,10 @@ function ir(p) {
   if (p === "final") pintarFinal();
   if (p === "conta") pintarConta();
   if (p === "bitacora") pintarBitacora();
+  /* Guardar y Enviar solo tienen sentido sobre el formulario de captura */
+  var acc = $("#navAcc");
+  if (acc) acc.hidden = (p !== "home");
+  ajustarBarra();
   window.scrollTo(0, 0);
 }
 
@@ -3409,12 +3505,15 @@ function recalcular() {
 
 function conceptoSel() { return M.concepto($("#fConcepto").value); }
 
+/* El concepto es SOLO una clasificacion: no habilita, no bloquea y no borra
+   ningun otro campo. Antes, elegir un concepto sin IVA descontable vaciaba el
+   IVA que la app habia leido de la factura y descuadraba el comprobante: el
+   documento traia $796.769 y el aviso de diferencia aparecia solo. El dato del
+   documento manda; que el IVA sea descontable o no es una clasificacion
+   contable posterior, no un motivo para borrar una cifra leida. */
 function ajustarIVA() {
-  var c = conceptoSel(), tipo = $("#fTipo").value;
-  var puede = c && c.AdmiteIVADescontable &&
-              ["Factura electrónica", "Documento equivalente POS"].indexOf(tipo) >= 0;
-  $("#fIva").disabled = !puede;
-  if (!puede) { $("#fIva").value = ""; recalcular(); }
+  var c = conceptoSel();
+  $("#fIva").disabled = false;
   $("#hintConcepto").textContent = c ? c.EjemplosGasto : "";
   $("#reqDesc").hidden = !(c && c.RevisionObligatoria);
 }
@@ -3989,6 +4088,8 @@ function arrancar() {
   listaArchivos(); recalcular(); ajustarIVA();
   aplicarRol();
   ir(primeraPantalla());
+  window.addEventListener("resize", ajustarBarra);
+  window.addEventListener("orientationchange", function () { setTimeout(ajustarBarra, 250); });
   try { registrarSW(); } catch (e) {}
   try { prepararInstalacion(); } catch (e) {}
 }
