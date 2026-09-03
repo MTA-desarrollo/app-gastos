@@ -896,6 +896,10 @@ async function datosDePDF(file){
         /* Se conserva la página rasterizada: si faltan campos, el usuario podrá
            recortarla y releerla sin volver a convertir el PDF. */
         window.MTAIMAGEN = png;
+        /* Se guardan los bytes del PDF: si el usuario recorta, se vuelve a
+           rasterizar solo esa zona a alta resolución en vez de ampliar una
+           imagen que ya perdió detalle. */
+        window.MTAPDFBYTES = buf;
         var ro = await window.MTAOCR.reconocer(png, window.MTAAVISO || null);
         if(ro && ro.texto){
           var dro = window.MTAREPRE.deRepresentacion(ro.texto);
@@ -926,6 +930,7 @@ async function leerSoporte(file){
       /* 2. sin QR legible, se lee el papel con OCR */
       if(window.MTAOCR && window.MTAREPRE){
         window.MTAIMAGEN = file;
+        window.MTAPDFBYTES = null;
         var r = await window.MTAOCR.reconocer(file, window.MTAAVISO || null);
         if(r && r.texto){
           var dr = window.MTAREPRE.deRepresentacion(r.texto);
@@ -1836,10 +1841,32 @@ function normalizar(txt) {
 }
 
 /* ----------------------------------------------------------- reconocer */
-async function reconocer(blob, avisar) {
+async function reconocer(blob, avisar, esRecorte) {
   var t0 = Date.now();
   var w = await motorConRespaldo(avisar);
   if (avisar) avisar("Preparando la imagen…");
+
+  /* Un recorte tiene pocas líneas y ningún contexto de página. El modo 6 —un
+     bloque uniforme— asume más estructura de la que hay; el 4 y el 11 leen
+     mejor unas pocas líneas sueltas. Se prueban y gana el que más texto saque. */
+  if (esRecorte) {
+    var cvR = await prepararImagen(blob, 2200);
+    var mejorT = "", mejorC = 0, mejorP = -1;
+    var modos = ["6", "4", "11"];
+    for (var i = 0; i < modos.length; i++) {
+      try {
+        await w.setParameters({ tessedit_pageseg_mode: modos[i] });
+        var rr = await w.recognize(cvR);
+        var tt = normalizar(rr.data.text || "");
+        var pp = puntuarLectura(tt);
+        if (pp > mejorP) { mejorP = pp; mejorT = tt; mejorC = rr.data.confidence || 0; }
+      } catch (e) {}
+      if (Date.now() - t0 > 25000) break;
+    }
+    try { await w.setParameters({ tessedit_pageseg_mode: "6" }); } catch (e) {}
+    return { texto: mejorT, confianza: mejorC, ms: Date.now() - t0 };
+  }
+
   var cv = await prepararImagen(blob, 2000);
   var r = await w.recognize(cv);
   var texto = normalizar(r.data.text || "");
@@ -1859,6 +1886,25 @@ async function reconocer(blob, avisar) {
     }
   }
   return { texto: texto, confianza: conf, ms: Date.now() - t0 };
+}
+
+/* Entre varias lecturas del mismo recorte gana la que trae más datos ÚTILES,
+   no la más larga. Un modo puede devolver más caracteres y aun así perder el
+   NIT: lo que interesa son las cifras y los nombres, no el volumen. */
+function puntuarLectura(t) {
+  if (!t) return -1;
+  var p = 0;
+  var grupos = t.match(/\b\d{3}[.,\s]?\d{3}[.,\s]?\d{3}\b/g);       /* un NIT entero */
+  p += (grupos ? grupos.length : 0) * 60;
+  var tercias = t.match(/\b\d{3}\b/g);                                 /* trozos de NIT */
+  p += (tercias ? tercias.length : 0) * 8;
+  if (/N\s*[.,]?\s*[I1l|]\s*[.,]?\s*T/i.test(t)) p += 25;              /* el rótulo NIT */
+  var soc = t.match(/\b(S\.?A\.?S|S\.?A|LTDA|E\.?U)\b/gi);            /* forma societaria */
+  p += (soc ? soc.length : 0) * 20;
+  var palabras = t.match(/\b[A-ZÁÉÍÓÚÑ]{4,}\b/g);                       /* nombres */
+  p += (palabras ? palabras.length : 0) * 4;
+  p += Math.min(40, t.replace(/\s/g, "").length / 12);                   /* algo de volumen */
+  return p;
 }
 
 async function liberar() {
@@ -2110,9 +2156,15 @@ function abrir(blob) {
     }
 
     document.getElementById("cerrarFoto").onclick = function () { cerrar(null); };
-    document.getElementById("usarTodo").onclick = function () { cerrar(blob); };
+    document.getElementById("usarTodo").onclick = function () {
+      window.MTAVISOR.recorte = null;
+      cerrar(blob);
+    };
     document.getElementById("usarRecorte").onclick = async function () {
       var b = null;
+      /* Se guardan las fracciones para que quien llame pueda repetir el mismo
+         recorte sobre una versión de más resolución del documento. */
+      window.MTAVISOR.recorte = { x0: st.rec.x0, y0: st.rec.y0, x1: st.rec.x1, y1: st.rec.y1, giro: st.giro };
       try { b = await recortar(); } catch (e) {}
       cerrar(b || blob);
     };
@@ -2130,7 +2182,7 @@ function abrir(blob) {
   });
 }
 
-window.MTAVISOR = { abrir: abrir };
+window.MTAVISOR = { abrir: abrir, recorte: null };
 })();
 </script>
 <script>/* =========================================================================
@@ -2176,8 +2228,12 @@ function cargar() {
   return cargando;
 }
 
-/* Devuelve un Blob PNG de la primera página, a la escala que el OCR necesita. */
-async function rasterizar(bytes, avisar) {
+/* Devuelve un Blob PNG de la primera página.
+   «lado» fija a cuántos píxeles se lleva el lado mayor. Por defecto 2400, que
+   basta para leer la página entera. Para releer un recorte pequeño se pide una
+   resolución mucho mayor: ampliar después un rasterizado de 2400 px produce
+   texto borroso, y era la causa de que el recorte no se leyera. */
+async function rasterizar(bytes, avisar, lado) {
   if (avisar) avisar("Preparando el documento…");
   var pdfjs = await cargar();
   var doc = await pdfjs.getDocument({
@@ -2188,7 +2244,7 @@ async function rasterizar(bytes, avisar) {
   var pag = await doc.getPage(1);
 
   var v1 = pag.getViewport({ scale: 1 });
-  var e = Math.min(4, 2400 / Math.max(v1.width, v1.height));
+  var e = Math.min(8, (lado || 2400) / Math.max(v1.width, v1.height));
   var vp = pag.getViewport({ scale: e });
 
   var cv = document.createElement("canvas");
@@ -3373,65 +3429,82 @@ function guardarGasto(enviar) {
 
 /* Vacía solo lo que proviene de la lectura del soporte. Concepto, destino y
    descripción los escribe la persona, así que se conservan. */
-/* Reabre la imagen que se usó para el OCR, deja que el usuario recorte la
-   zona con los datos que faltaron, y lee otra vez solo ese recorte. */
+/* Reabre la imagen que se usó para el OCR, deja que el usuario recorte la zona
+   con los datos que faltaron, y lee otra vez solo ese recorte.
+
+   Cuando el soporte es un PDF, el recorte NO se hace sobre la imagen que ya se
+   había rasterizado: se vuelve a rasterizar la página a mucha mayor resolución
+   y se corta de ahí. Ampliar un rasterizado de 2400 px hasta llenar el ancho
+   del OCR produce texto borroso, y era la razón de que el recorte tampoco se
+   leyera. */
+async function recortarConMasResolucion() {
+  var r = window.MTAVISOR.recorte;
+  if (!r || !window.MTAPDFBYTES || !window.MTAPDF) return null;
+  var alto = (r.y1 - r.y0), ancho = (r.x1 - r.x0);
+  /* Se pide la resolución necesaria para que el recorte quede en unos 2200 px */
+  var lado = Math.min(9000, Math.round(2200 / Math.max(0.08, Math.min(ancho, alto))));
+  var png = await window.MTAPDF.rasterizar(window.MTAPDFBYTES, window.MTAAVISO || null, lado);
+  if (!png) return null;
+
+  var bmp = await createImageBitmap(png);
+  var cw = Math.max(60, Math.round(ancho * bmp.width));
+  var ch = Math.max(60, Math.round(alto * bmp.height));
+  var cv = document.createElement("canvas");
+  cv.width = cw; cv.height = ch;
+  var ctx = cv.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cw, ch);
+  ctx.drawImage(bmp, Math.round(r.x0 * bmp.width), Math.round(r.y0 * bmp.height),
+                cw, ch, 0, 0, cw, ch);
+  if (bmp.close) bmp.close();
+  return new Promise(function (res) { cv.toBlob(res, "image/png"); });
+}
+
 async function recortarYReleer() {
   var img = window.MTAIMAGEN;
   if (!img || !window.MTAVISOR) return;
+  window.MTAVISOR.recorte = null;
   var b = await window.MTAVISOR.abrir(img);
   if (!b) return;
 
   var av = $("#leyendo");
   av.hidden = false;
   av.querySelector("span:last-child").textContent = "Leyendo el recorte…";
+
+  /* Si es un PDF y hubo recorte, se rehace desde el original en alta resolución */
+  try {
+    var mejor = await recortarConMasResolucion();
+    if (mejor) b = mejor;
+  } catch (e) {}
+
   var r = null;
   try {
-    var t = await window.MTAOCR.reconocer(b, window.MTAAVISO || null);
+    var t = await window.MTAOCR.reconocer(b, window.MTAAVISO || null, true);
     if (t && t.texto) {
       window.MTAULTIMO = { texto: t.texto, via: "ocr · recorte", ms: Math.round((t.ms || 0) / 1000) };
       var d = window.MTAREPRE.deRepresentacion(t.texto);
       if (d) r = { datos: d, via: "ocr", texto: t.texto };
+      else r = { datos: {}, via: "ocr", texto: t.texto };
     }
-  } catch (e) {}
+  } catch (e) { window.MTAERROR = String(e && e.message || e); }
   av.hidden = true;
 
-  if (!r) { toast("El recorte tampoco se pudo leer. Escriba los datos a mano.", "warn"); return; }
+  if (!r) { toast("El recorte no se pudo procesar. Escriba los datos a mano.", "warn"); return; }
 
-  /* Solo se rellena lo que estaba vacío: no se pisa lo que ya se había leído
-     bien en la primera pasada. */
+  /* Solo se rellena lo que estaba vacío; el proveedor sí se reemplaza si el
+     recorte trajo uno más confiable que el nombre del local. */
   var mapa = { fNumero: "numfac", fNit: "nitfac", fProveedor: "proveedor", fCufe: "cufe" };
   var n = 0;
   Object.keys(mapa).forEach(function (id) {
     var v = r.datos[mapa[id]];
     if (!v) return;
     var e = $("#" + id);
-    /* El proveedor sí se reemplaza si el recorte trajo uno más confiable: el
-       primero venía del nombre del local. */
     var pisar = !e.value || (id === "fProveedor" && !r.datos.proveedorDudoso);
     if (pisar) { e.value = v; e.classList.add("auto-ocr"); n++; }
   });
   if (r.datos.fecfac && !$("#fFecha").value) { $("#fFecha").value = r.datos.fecfac; n++; }
 
-  toast(n ? "Se completaron " + n + " campos con el recorte."
-          : "El recorte no aportó campos nuevos.", n ? "ok" : "warn");
-}
-
-/* Deja la pantalla de captura como recién abierta. La usan el botón Home y el
-   guardado, para que nunca queden datos del soporte anterior. */
-function nuevoGasto() {
-  var habia = archivos.length || $("#fTotal").value || $("#fNumero").value ||
-              $("#fProveedor").value || $("#fNit").value;
-  archivos = [];
-  limpiar();
-  listaArchivos();
-  window.MTAIMAGEN = null;
-  window.MTAULTIMO = null;
-  window.MTAERROR = null;
-  ir("home");
-  /* Safari en iOS 15 y anteriores no acepta el objeto con «behavior»: hay que
-     dejar preparada la forma antigua. */
-  try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { try { window.scrollTo(0, 0); } catch (e2) {} }
-  if (habia) toast("Pantalla lista para un gasto nuevo.");
+  if (n) toast("Se completaron " + n + " campos con el recorte.", "ok");
+  else toast("El recorte no aportó campos nuevos. Vea el texto leído en Bitácora.", "warn");
 }
 
 function limpiarLectura() {
