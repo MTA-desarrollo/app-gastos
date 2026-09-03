@@ -936,6 +936,11 @@ async function leerSoporte(file){
         if(r && r.texto){
           var dr = window.MTAREPRE.deRepresentacion(r.texto);
           if(dr) return {datos:dr, via:"ocr", texto:r.texto, confianza:r.confianza};
+          /* El OCR SI leyo texto, pero no se pudo interpretar. Devolverlo igual
+             es lo que permite que el panel de diagnostico muestre el texto
+             crudo: sin esto decia «no se extrajo texto» justo cuando mas falta
+             hace, y la ruta del PDF ya lo hacia bien. */
+          return {datos:null, via:"ocr", texto:r.texto, confianza:r.confianza};
         }
       }
       return null;
@@ -1165,7 +1170,11 @@ window.MTALECTOR = {
   razonSocial: razonSocial,
   proveedorDe: proveedorDe,
   recordar: recordar,
-  memoria: memoria
+  memoria: memoria,
+  /* limpiar vive aqui pero lector_repre.js tambien la necesita para la via del
+     rotulo «Razon social:». Cada modulo va en su propia envoltura, asi que sin
+     exportarla la llamada lanzaba ReferenceError y tumbaba la lectura entera. */
+  limpiar: limpiar
 };
 })();
 </script>
@@ -1370,7 +1379,12 @@ function emisor(txt, nit) {
   /* 1 · rótulo explícito — lo más fiable */
   var m = txt.match(/raz[oó]n\s*social\s*:?\s*([^\n\r|]{4,70})/i) ||
           txt.match(/nombre\s*o\s*raz[oó]n\s*social\s*:?\s*([^\n\r|]{4,70})/i);
-  if (m) { var v0 = limpiar(m[1]); if (candidatoValido(v0)) cands.push([v0, 100]); }
+  if (m) {
+    var v0 = (window.MTALECTOR && window.MTALECTOR.limpiar)
+               ? window.MTALECTOR.limpiar(m[1])
+               : String(m[1]).replace(/\s+/g, " ").trim();
+    if (candidatoValido(v0)) cands.push([v0, 100]);
+  }
 
   /* 2 · línea con sufijo societario, aunque el OCR lo haya degradado.
         Es la señal que distingue la empresa del nombre comercial. */
@@ -2237,8 +2251,13 @@ function cargar() {
 async function rasterizar(bytes, avisar, lado) {
   if (avisar) avisar("Preparando el documento…");
   var pdfjs = await cargar();
+  /* pdf.js TRANSFIERE el ArrayBuffer a su worker: al volver, el arreglo que
+     recibimos queda vacio. Como los bytes del PDF se guardan para poder
+     re-rasterizar un recorte en alta resolucion, hay que entregarle una COPIA
+     y conservar el original. Sin esto, «Recortar y volver a leer» fallaba con
+     DataCloneError y caia al rasterizado degradado. */
   var doc = await pdfjs.getDocument({
-    data: bytes,
+    data: new Uint8Array(bytes),
     disableFontFace: true,
     isEvalSupported: false
   }).promise;
