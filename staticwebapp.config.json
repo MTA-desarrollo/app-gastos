@@ -14,9 +14,10 @@
     "Permissions-Policy": "camera=(self), microphone=(), geolocation=()"
   },
   "routes": [
-    { "route": "/sw.js",               "headers": { "Cache-Control": "no-cache" } },
-    { "route": "/manifest.webmanifest","headers": { "Cache-Control": "public, max-age=3600" } },
-    { "route": "/iconos/*",            "headers": { "Cache-Control": "public, max-age=604800" } }
+    { "route": "/sw.js",                "headers": { "Cache-Control": "no-cache" } },
+    { "route": "/manifest.webmanifest", "headers": { "Cache-Control": "public, max-age=3600" } },
+    { "route": "/*.png",                "headers": { "Cache-Control": "public, max-age=604800" } },
+    { "route": "/.well-known/*",        "headers": { "Cache-Control": "public, max-age=3600" } }
   ],
   "navigationFallback": { "rewrite": "/index.html" },
   "responseOverrides": { "404": { "rewrite": "/index.html" } }

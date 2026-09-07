@@ -1939,7 +1939,19 @@ window.MTAREPRE = { deRepresentacion: deRepresentacion, limpiarNumero: limpiarNu
 (function () {
 "use strict";
 
-var CDN = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+/* VERSIÓN FIJA, a propósito. 7 de septiembre de 2026.
+   Antes decía «@5», que en jsDelivr significa «la 5.x que haya hoy». Es decir:
+   la app se actualizaba sola, sin que nadie lo decidiera y sin que nadie lo
+   probara. Una versión nueva del lector puede cambiar cómo resuelve el modelo
+   de idioma —que es exactamente lo que causó el error 45, el que hacía que no
+   se leyera ningún campo— y el fallo aparecería un martes cualquiera, en el
+   celular de un colaborador, sin que hubiéramos tocado una línea.
+   5.1.1 es la versión con la que se midió 18 de 18 campos en el banco de
+   pruebas. Se fija esa. Para subirla: cambiar el número aquí, volver a correr
+   `medir2.js` y `regresion.js`, y solo entonces publicar.
+   pdf.js ya estaba fijado así, en 3.11.174. Ahora los dos van igual. */
+var VERSION_TESSERACT = "5.1.1";
+var CDN = "https://cdn.jsdelivr.net/npm/tesseract.js@" + VERSION_TESSERACT + "/dist/tesseract.min.js";
 var cargando = null, motor = null, motorPrometido = null;
 
 /* Un celular de gama media tarda entre 6 y 15 segundos por foto. Si a los 45
@@ -2579,6 +2591,19 @@ function abrir(blob) {
 
     function cerrar(res) {
       velo.hidden = true;
+      /* Se retira el escuchador al cerrar. MEDIDO el 7 de septiembre de 2026
+         con el protocolo de depuración de Chromium (`visorfuga.js`): abrir el
+         visor seis veces dejaba SIEMPRE dos escuchadores de `resize`, no siete,
+         porque el navegador ignora un escuchador repetido cuando el tipo, la
+         función y la fase son los mismos. Es decir: NO había fuga de memoria,
+         al contrario de lo que decía el hallazgo 8 de la auditoría del 3 de
+         septiembre. Ese hallazgo queda corregido.
+         Lo que sí ocurría, y esto sí es real: el escuchador quedaba puesto para
+         siempre, así que cada vez que el usuario giraba el teléfono con el
+         visor CERRADO se recalculaba y se movía el marco de un panel oculto.
+         Trabajo inútil en el momento en que menos sobra. Verificado antes y
+         después con la misma prueba. */
+      window.removeEventListener("resize", pintar);
       URL.revokeObjectURL(url);
       if (bmp && bmp.close) bmp.close();
       bmp = null;
@@ -3653,7 +3678,13 @@ var M = window.MTAG;
 var $ = function (s, r) { return (r || document).querySelector(s); };
 var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 var archivos = [];      /* colFotos + dcAdjuntos del sprint 1 */
-var pantalla = "captura";
+/* «home», no «captura». La pantalla de captura se llama «home» desde que se
+   rehízo la navegación; «captura» era el nombre viejo y ya no existe como
+   pantalla. El efecto era inofensivo —`aplicarRol()` redirigía al arrancar,
+   así que el usuario nunca vio nada raro— pero dejaba una variable mintiendo
+   sobre el estado de la app, y la siguiente persona que leyera este código
+   perdería un rato averiguando dónde está la pantalla «captura». */
+var pantalla = "home";
 var seleccion = [];
 
 /* D36 · medición del lector. `origenActual` guarda con cuál de los tres
