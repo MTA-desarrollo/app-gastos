@@ -118,20 +118,25 @@ select,input,textarea{padding:8px 10px}
 /* Mas bajos que antes -de 74 a 48 px- pero conservan el color de marca, el
    borde y el tamano del icono, que es lo que los mantiene como el punto de
    entrada evidente de la pantalla. */
-.dropzone{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+/* Tres accesos de captura en una sola fila. El alto no cambia respecto de los
+   dos anteriores: lo que se reparte es el ancho. Medido en 360 px. */
+.dropzone{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
 .drop{border:1.5px solid var(--brass-soft);border-radius:11px;background:var(--brass-soft);
-      padding:9px 8px;cursor:pointer;display:grid;grid-template-columns:auto 1fr;
-      gap:7px;align-items:center;text-align:left;
+      padding:8px 5px;cursor:pointer;display:grid;grid-template-rows:auto auto;
+      gap:3px;align-items:center;justify-items:center;text-align:center;
       transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease}
 .drop:hover{border-color:var(--brass);box-shadow:0 4px 16px rgba(0,119,192,.18)}
 .drop:active{transform:scale(.985)}
 .drop div{min-width:0}
-.drop b{display:block;font-size:12.5px;color:var(--deep);line-height:1.2;
-        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.drop span{display:block;font-size:10px;color:var(--brass);opacity:.85;line-height:1.25;
-           white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.drop svg{width:22px;height:22px;stroke:var(--brass);fill:none;stroke-width:1.7;flex:none}
-@media(min-width:420px){.drop b{font-size:13.5px}.drop span{font-size:10.5px}}
+.drop b{display:block;font-size:12px;color:var(--deep);line-height:1.15;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.drop span{display:none}
+.drop svg{width:21px;height:21px;stroke:var(--brass);fill:none;stroke-width:1.7;flex:none}
+/* El escaner del sistema es el que mejor lee: se destaca sin gritar. */
+.drop.recomendado{border-color:var(--brass)}
+.drop .pista{display:block;font-size:9px;color:var(--brass);opacity:.9;line-height:1.1;
+             font-weight:600;letter-spacing:.02em}
+@media(min-width:420px){.drop{padding:9px 8px}.drop b{font-size:13px}.drop .pista{font-size:9.5px}}
 #listaFiles{display:flex;flex-direction:column;gap:7px;margin-top:9px}
 #listaFiles:empty{margin-top:0}
 .file{display:flex;align-items:center;gap:10px;background:var(--paper-2);
@@ -321,6 +326,18 @@ nav.compacta .navacc .btn{flex:0 1 auto;min-width:0;padding:0 8px;font-size:11.5
 .rc span{color:var(--slate);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rc i{font-style:normal;font-size:11px;color:var(--faint)}
 .rc b:last-child{font-family:"Source Code Pro",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+/* D36 · tablita de medición del lector. Cabe en 320 px sin desbordar: los
+   rótulos van a la izquierda y las cifras a la derecha, en tabular. */
+.tabm{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:2px}
+.tabm th{text-align:right;font-weight:600;color:var(--faint);font-size:10px;
+         letter-spacing:.02em;padding:3px 2px;border-bottom:1px solid var(--line)}
+.tabm th:first-child{text-align:left}
+.tabm td{text-align:right;padding:5px 2px;border-bottom:1px solid var(--line);
+         font-family:"Source Code Pro",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.tabm td:first-child{text-align:left;font-family:inherit;color:var(--slate);
+                     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tabm tr:last-child td{border-bottom:none}
+.accm{display:flex;gap:8px;flex-wrap:wrap}
 .instalar{position:sticky;top:57px;z-index:29;background:var(--brass-soft);
           border-bottom:1px solid rgba(0,119,192,.28)}
 .ibar{display:flex;align-items:center;gap:11px;padding:10px 14px}
@@ -520,14 +537,22 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
     <div class="dropzone">
       <div class="drop" id="btnFoto">
         <svg viewBox="0 0 24 24"><path d="M3 8a2 2 0 012-2h2l1.5-2h7L17 6h2a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="12.5" r="3.2"/></svg>
-        <div><b>Tomar foto</b><span>Cámara del dispositivo</span></div>
+        <div><b>Tomar foto</b></div>
+      </div>
+      <div class="drop recomendado" id="btnEscanear">
+        <svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2"/><path d="M4 12h16"/></svg>
+        <div><b>Escanear</b><span class="pista">lee mejor</span></div>
       </div>
       <div class="drop" id="btnArchivo">
         <svg viewBox="0 0 24 24"><path d="M13 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V9z"/><path d="M13 3v6h6"/></svg>
-        <div><b>Adjuntar archivo</b><span>PDF, XML o imagen</span></div>
+        <div><b>Adjuntar</b></div>
       </div>
     </div>
     <input type="file" id="inFoto" accept="image/*" capture="environment" multiple hidden>
+    <!-- SIN capture: eso es lo que hace que el sistema ofrezca su propio
+         escáner de documentos, que endereza la hoja, corrige la perspectiva y
+         sube el contraste mejor que cualquier cosa que pueda hacer la app. -->
+    <input type="file" id="inEscaneo" accept="application/pdf,image/*" multiple hidden>
     <input type="file" id="inArchivo" accept="application/pdf,image/*,.xml,text/xml" multiple hidden>
     <div id="leyendo" hidden><span class="spin"></span><span>Leyendo el soporte…</span></div>
     <div class="aviso avisoocr" id="avisoOCR" hidden>
@@ -609,6 +634,51 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
   </div>
 </div>
 
+<!-- Guía del escáner del sistema. La app no puede abrir el escáner
+     directamente —ningún navegador expone esa API—, pero sí puede llevar al
+     usuario al selector donde vive y explicarle dónde tocar. -->
+<div class="velo" id="veloEscaner" hidden>
+  <div class="hoja">
+    <div class="hcab">
+      <div class="iico">MTA</div>
+      <div><b>Escanear el documento</b><span>Se lee mucho mejor que una foto</span></div>
+      <button class="ix" id="cerrarEscaner">&times;</button>
+    </div>
+
+    <p class="aclara">Su teléfono trae un escáner de documentos que endereza la hoja,
+      corrige la perspectiva y sube el contraste. La app va a abrir el selector de
+      archivos: el escáner está ahí.</p>
+
+    <ol class="pasos" id="pasosIOS" hidden>
+      <li><span class="pn">1</span><span class="pt">Toque <b>Elegir archivo</b>
+        <i>Se abre la app Archivos.</i></span></li>
+      <li><span class="pn">2</span><span class="pt">Arriba a la derecha, toque los <b>tres puntos</b> ⋯
+        <i>y luego <b>Escanear documentos</b>. En algunos iPhone la opción aparece de una vez en la lista.</i></span></li>
+      <li><span class="pn">3</span><span class="pt">Encuadre el documento y toque el obturador
+        <i>El iPhone detecta los bordes solo. Después toque <b>Guardar</b>.</i></span></li>
+      <li><span class="pn">4</span><span class="pt">Escoja el archivo que acaba de guardar
+        <i>La app lo lee y llena los campos.</i></span></li>
+    </ol>
+
+    <ol class="pasos" id="pasosAndroid" hidden>
+      <li><span class="pn">1</span><span class="pt">En el selector, escoja <b>Archivos</b> o <b>Drive</b>
+        <i>Muchos Samsung traen el escáner dentro de <b>Mis archivos</b>.</i></span></li>
+      <li><span class="pn">2</span><span class="pt">Busque <b>Escanear</b> o el ícono de la cámara con marco
+        <i>En Google Drive: el botón <b>+</b> y luego <b>Escanear</b>.</i></span></li>
+      <li><span class="pn">3</span><span class="pt">Encuadre el documento y confirme
+        <i>Se guarda como PDF.</i></span></li>
+      <li><span class="pn">4</span><span class="pt">Escoja ese PDF
+        <i>La app lo lee y llena los campos.</i></span></li>
+    </ol>
+
+    <p class="ojo">Si su teléfono no tiene escáner, escoja la foto de siempre: la app
+      también la lee. Y si algo queda mal, use <b>Recortar y volver a leer</b>.</p>
+
+    <label class="chk" style="margin-top:10px"><input type="checkbox" id="noMostrarEscaner"> No volver a mostrar esto</label>
+    <button class="btn pri" id="okEscaner">Abrir el selector</button>
+  </div>
+</div>
+
 <!-- ============ MIS GASTOS ============ -->
 <section class="pane" id="pane-mis" hidden>
   <div class="resumen"><span id="sumN">0 gastos</span><b id="sumV">$ 0</b></div>
@@ -677,6 +747,17 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
     <textarea id="txtDiag" rows="12" readonly class="diag"></textarea>
     <button class="mini" id="copiarDiag">Copiar</button>
   </div>
+  <!-- D36 · medición del lector. Existe para decidir con números, y no con
+       impresiones, si hace falta un lector de facturas de pago. -->
+  <div class="card">
+    <p class="tit">Rendimiento del lector</p>
+    <div id="lecResumen"></div>
+    <div class="accm">
+      <button class="mini" id="copiarLector">Copiar el resumen</button>
+      <button class="mini" id="borrarLector">Borrar las mediciones</button>
+    </div>
+  </div>
+
   <div id="colaBita"></div>
   <p class="pie">Los datos se guardan en este navegador ·
     <button id="btnReset">borrar todo</button></p>
@@ -2704,9 +2785,10 @@ function estadoSimple(e) {
 /* ---------- estado ---------- */
 var S = {
   Gastos: [], Reembolsos: [], Bitacora: [], Proyectos: [],
+  Lecturas: [],
   Parametros: Object.assign({}, PARAMETROS),
   usuario: USUARIOS[0].Email,
-  seqGasto: 0, seqReembolso: 0
+  seqGasto: 0, seqReembolso: 0, seqLectura: 0
 };
 
 function guardar() { try { localStorage.setItem(K, JSON.stringify(S)); } catch (e) {} }
@@ -2752,6 +2834,153 @@ function bitacora(evento, tipo, id, referencia, valor, detalle, origen){
     Origen: origen || "Aplicación",
     Detalle: detalle || ""
   });
+  guardar();
+}
+
+/* =========================================================================
+   MEDICIÓN DEL LECTOR — D36 · 7 de septiembre de 2026
+   -------------------------------------------------------------------------
+   Por qué existe esto. La decisión de si vale la pena pagar un lector de
+   facturas en la nube (Azure Document Intelligence) no se puede tomar con la
+   impresión de nadie sobre si «lee bien» o «lee mal». Se toma con dos números
+   que hoy no tenemos: cuántos campos llena el lector actual, y cuántos de los
+   que llena están BIEN. Son cosas distintas, y confundirlas es el error
+   clásico: un lector que llena los nueve campos y se equivoca en el total es
+   peor que uno que llena cuatro y acierta en todos.
+
+   Cómo se miden.
+   · Llenado — se anota, en cada lectura real, qué campos quedaron llenos y con
+     qué valor.
+   · Acierto — cuando la persona guarda el gasto, se compara ese valor con el
+     que quedó finalmente en el formulario. Si lo dejó igual, el lector acertó;
+     si lo cambió, se equivocó; y si lo escribió en un campo que el lector dejó
+     vacío, eso se cuenta aparte como trabajo manual.
+   La comparación ignora puntos, comas, espacios, mayúsculas y tildes: 1.234.567
+   y 1234567 son el mismo número, y no tendría sentido contar eso como error.
+
+   Límite honesto: esto vive en el localStorage de CADA teléfono. Mide el
+   aparato, no la firma. Para tener la medida de todos hay que pasar a
+   SharePoint (opción C). Mientras tanto, el botón «Copiar el resumen» de la
+   Bitácora existe para que quien mida pueda enviar su número.
+   ========================================================================= */
+
+var CAMPOS_LECTOR = [
+  {k:"numfac",    n:"Número"},
+  {k:"fecha",     n:"Fecha"},
+  {k:"nit",       n:"NIT"},
+  {k:"proveedor", n:"Proveedor"},
+  {k:"base",      n:"Base"},
+  {k:"iva",       n:"IVA"},
+  {k:"otros",     n:"Otros"},
+  {k:"total",     n:"Total"},
+  {k:"cufe",      n:"CUFE"}
+];
+var TOPE_LECTURAS = 400;   /* un año de uso intenso cabe de sobra y no infla el localStorage */
+
+/* Compara «como lo leería una persona»: sin puntuación, sin tildes, sin caja. */
+function igualable(v) {
+  if (v == null) return "";
+  return String(v).toLowerCase()
+    .replace(/[áàä]/g, "a").replace(/[éèë]/g, "e").replace(/[íìï]/g, "i")
+    .replace(/[óòö]/g, "o").replace(/[úùü]/g, "u").replace(/ñ/g, "n")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function registrarLectura(r) {
+  if (!S.Lecturas) S.Lecturas = [];
+  S.seqLectura = (S.seqLectura || 0) + 1;
+  var L = {
+    ID: S.seqLectura,
+    Fecha: ahora(),
+    Usuario: usuario().Nombre,
+    CorreoUsuario: S.usuario,
+    Origen: r.origen || "archivo",        /* foto · escaneo · archivo · recorte */
+    Via: r.via || "sin lectura",          /* xml · qr · texto · pdf · ocr · ocr · recorte */
+    Segundos: Math.round(Number(r.seg) || 0),
+    Leidos: r.leidos || {},
+    NumLeidos: 0,
+    Error: r.error || "",
+    Cerrada: false,
+    Correctos: null, Corregidos: [], AMano: [], Gasto: ""
+  };
+  for (var k in L.Leidos) if (L.Leidos[k] !== "" && L.Leidos[k] != null) L.NumLeidos++;
+  S.Lecturas.push(L);
+  while (S.Lecturas.length > TOPE_LECTURAS) S.Lecturas.shift();
+  guardar();
+  return L.ID;
+}
+
+/* Se llama al guardar el gasto: ahí, y solo ahí, se sabe qué valor era el bueno. */
+function cerrarLectura(id, finales, referencia) {
+  var L = null, i;
+  for (i = S.Lecturas.length - 1; i >= 0; i--) if (S.Lecturas[i].ID === id) { L = S.Lecturas[i]; break; }
+  if (!L || L.Cerrada) return;
+  var ok = 0, mal = [], mano = [];
+  for (i = 0; i < CAMPOS_LECTOR.length; i++) {
+    var k = CAMPOS_LECTOR[i].k;
+    var leido = igualable(L.Leidos[k]), fin = igualable(finales[k]);
+    if (leido) { if (leido === fin) ok++; else mal.push(k); }
+    else if (fin) mano.push(k);
+  }
+  L.Cerrada = true;
+  L.Correctos = ok;
+  L.Corregidos = mal;
+  L.AMano = mano;
+  L.Gasto = referencia || "";
+  guardar();
+}
+
+/* Agrega todo lo medido. Es lo que pinta la Bitácora y lo que se copia. */
+function resumenLector() {
+  var L = (S.Lecturas || []);
+  var R = {
+    n: L.length, cerradas: 0, conAlgo: 0,
+    campos: 0, segundos: 0, correctos: 0, corregidos: 0, aMano: 0,
+    porVia: {}, porOrigen: {}, porCampo: {}, desde: "", hasta: ""
+  };
+  CAMPOS_LECTOR.forEach(function (c) {
+    R.porCampo[c.k] = { n: c.n, leido: 0, ok: 0, mal: 0, mano: 0, cerradas: 0 };
+  });
+  L.forEach(function (x) {
+    if (!R.desde || x.Fecha < R.desde) R.desde = x.Fecha;
+    if (!R.hasta || x.Fecha > R.hasta) R.hasta = x.Fecha;
+    R.campos += x.NumLeidos;
+    R.segundos += x.Segundos;
+    if (x.NumLeidos) R.conAlgo++;
+
+    var v = R.porVia[x.Via] || (R.porVia[x.Via] = {n:0, campos:0, seg:0, ok:0, mal:0, cerradas:0});
+    v.n++; v.campos += x.NumLeidos; v.seg += x.Segundos;
+    var o = R.porOrigen[x.Origen] || (R.porOrigen[x.Origen] = {n:0, campos:0, seg:0, ok:0, mal:0, cerradas:0});
+    o.n++; o.campos += x.NumLeidos; o.seg += x.Segundos;
+
+    CAMPOS_LECTOR.forEach(function (c) {
+      if (x.Leidos && x.Leidos[c.k] !== "" && x.Leidos[c.k] != null) R.porCampo[c.k].leido++;
+    });
+    if (!x.Cerrada) return;
+    R.cerradas++; v.cerradas++; o.cerradas++;
+    R.correctos += x.Correctos || 0;
+    R.corregidos += (x.Corregidos || []).length;
+    R.aMano += (x.AMano || []).length;
+    v.ok += x.Correctos || 0; v.mal += (x.Corregidos || []).length;
+    o.ok += x.Correctos || 0; o.mal += (x.Corregidos || []).length;
+    CAMPOS_LECTOR.forEach(function (c) {
+      var p = R.porCampo[c.k];
+      p.cerradas++;
+      if ((x.Corregidos || []).indexOf(c.k) >= 0) p.mal++;
+      else if ((x.AMano || []).indexOf(c.k) >= 0) p.mano++;
+      else if (x.Leidos && x.Leidos[c.k]) p.ok++;
+    });
+  });
+  R.camposPorLectura = R.n ? R.campos / R.n : 0;
+  R.segPorLectura    = R.n ? R.segundos / R.n : 0;
+  R.precision        = (R.correctos + R.corregidos) ? R.correctos / (R.correctos + R.corregidos) : null;
+  R.totalCampos      = CAMPOS_LECTOR.length;
+  return R;
+}
+
+function borrarLecturas() {
+  S.Lecturas = [];
+  S.seqLectura = 0;
   guardar();
 }
 
@@ -2953,6 +3182,9 @@ window.MTAG = {
   guardar: guardar, cargar: cargar, reiniciar: reiniciar,
   ref: ref, hoy: hoy, pesos: pesos, fechaCorta: fechaCorta,
   usuario: usuario, concepto: concepto, bitacora: bitacora,
+  CAMPOS_LECTOR: CAMPOS_LECTOR,
+  registrarLectura: registrarLectura, cerrarLectura: cerrarLectura,
+  resumenLector: resumenLector, borrarLecturas: borrarLecturas,
   marcasDeGasto: marcasDeGasto, totalCalculado: totalCalculado,
   crearGasto: crearGasto, enviarGasto: enviarGasto, resolverGasto: resolverGasto,
   crearReembolso: crearReembolso, resolverReembolso: resolverReembolso,
@@ -3193,7 +3425,7 @@ window.MTAXLSX = { libro: libro, descargar: descargar, ESTILO: {
 
      Control de gastos   · una fila por gasto, con todo lo capturado
      Resumen por concepto· totales agrupados, base para las cuentas del PUC
-     Resumen por centro  · totales por centro de costo
+     Resumen por destino  · totales por destino del gasto
      Reembolsos          · las cabeceras consolidadas con su sello
 
    Las columnas y su orden salen del esquema de la lista `Gastos`, de modo que
@@ -3228,7 +3460,11 @@ var COLUMNAS = [
   ["Código concepto",   14, function (g) { return f(g.CodigoConcepto || "", E.MONO); }],
   ["Concepto",          26, function (g) { return g.Concepto || ""; }],
   ["Cuenta PUC",        13, function ()  { return ""; }],
-  ["Centro de costo",   20, function (g) { return g.CentroCosto || ""; }],
+  /* El encabezado dice «Destino» porque es lo que la app pide y lo que trae el
+     dato. El nombre INTERNO del campo sigue siendo CentroCosto, que es el de
+     SharePoint y no se cambia. Contabilidad venia recibiendo un encabezado
+     -«Centro de costo»- con los tres valores de Destino adentro. */
+  ["Destino",           20, function (g) { return g.CentroCosto || ""; }],
   ["Descripción",       30, function (g) { return g.Descripcion || ""; }],
   ["Valor base",        13, function (g) { return n(g.ValorBase); }],
   ["IVA",               12, function (g) { return n(g.IVA); }],
@@ -3339,9 +3575,9 @@ function hojaCentro(gs) {
   });
   var ks = Object.keys(m).sort(function (a, b) { return m[b].total - m[a].total; });
   var filas = [
-    [f("RESUMEN POR CENTRO DE COSTO", E.TITULO)],
+    [f("RESUMEN POR DESTINO", E.TITULO)],
     [],
-    [f("Centro de costo", E.ENCABEZADO), f("N.º gastos", E.ENCABEZADO),
+    [f("Destino", E.ENCABEZADO), f("N.º gastos", E.ENCABEZADO),
      f("Total", E.ENCABEZADO), f("Participación", E.ENCABEZADO)]
   ];
   var gran = ks.reduce(function (a, k) { return a + m[k].total; }, 0);
@@ -3351,7 +3587,7 @@ function hojaCentro(gs) {
   });
   filas.push([f("TOTAL", E.TOTAL), { v: gs.length, t: "n", s: E.TOTAL },
               n(gran, E.MONEDA_TOTAL), f("100,0 %", E.TOTAL)]);
-  return { nombre: "Por centro de costo", filas: filas, anchos: [28, 12, 16, 14], congelar: 3 };
+  return { nombre: "Por destino", filas: filas, anchos: [28, 12, 16, 14], congelar: 3 };
 }
 
 /* ---------- hoja 4: reembolsos ---------- */
@@ -3419,6 +3655,21 @@ var $$ = function (s, r) { return Array.prototype.slice.call((r || document).que
 var archivos = [];      /* colFotos + dcAdjuntos del sprint 1 */
 var pantalla = "captura";
 var seleccion = [];
+
+/* D36 · medición del lector. `origenActual` guarda con cuál de los tres
+   botones entró el soporte —foto, escaneo o archivo—, que es justamente la
+   comparación que hace falta para saber si el escáner del teléfono lee mejor
+   que la cámara. `lecturasAbiertas` son las lecturas de este gasto que todavía
+   no se pueden calificar: se califican al guardar, comparando lo que leyó el
+   lector con lo que quedó en el formulario. */
+var origenActual = "archivo";
+var lecturasAbiertas = [];
+
+/* De cada campo del formulario, la clave con la que se mide */
+var CAMPO_DE = {
+  fNumero: "numfac", fFecha: "fecha", fNit: "nit", fProveedor: "proveedor",
+  fBase: "base", fIva: "iva", fOtros: "otros", fTotal: "total", fCufe: "cufe"
+};
 
 function el(t, c, h) { var e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; }
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
@@ -3568,6 +3819,7 @@ function listaArchivos() {
          seguían llenos. */
       if (!archivos.length) {
         limpiarLectura();
+        lecturasAbiertas = [];
         window.MTAIMAGEN = null;
         window.MTAPDFBYTES = null;
         try { if (window.MTAOCR && window.MTAOCR.soltar) window.MTAOCR.soltar(); } catch (e) {}
@@ -3657,13 +3909,14 @@ async function entraArchivo(file) {
   av.hidden = true;
   var seg = Math.round((Date.now() - t0) / 1000);
   window.MTAULTIMO = r ? { texto: r.texto || "", via: r.via, ms: seg } : { texto: "", via: null, ms: seg };
+  var puestos = {};
   if (r && r.datos) {
     var d = r.datos;
     /* Razon social: el QR no la trae. Se busca en el texto del documento, y si
        no aparece se recupera de lo que la app ya aprendio de ese NIT. */
     if (!d.proveedor && r.texto) d.proveedor = window.MTALECTOR.razonSocial(r.texto, d.nitfac);
     if (!d.proveedor && d.nitfac) d.proveedor = window.MTALECTOR.proveedorDe(d.nitfac);
-    diligenciar(d, r.via);
+    puestos = diligenciar(d, r.via) || {};
   } else {
     /* Decir POR QUE fallo, no solo que fallo. Si el lector no se pudo preparar
        —sin senal la primera vez, por ejemplo— el usuario tiene que saber que
@@ -3678,6 +3931,19 @@ async function entraArchivo(file) {
       ? "No se pudo leer el soporte tras " + seg + " segundos."
       : "No se pudo leer el soporte.") + porque + " Complete los campos a mano.", "warn");
   }
+
+  /* D36 · queda anotada TODA lectura, incluidas las que no leyeron nada: una
+     medida que solo cuenta los éxitos no sirve para decidir nada. */
+  try {
+    lecturasAbiertas.push(M.registrarLectura({
+      origen: origenActual,
+      via: (r && r.via) || null,
+      seg: seg,
+      leidos: puestos,
+      error: r ? "" : (window.MTAERROR || "")
+    }));
+  } catch (e) {}
+
   /* La foto decodificada ocupa decenas de megas. Se suelta apenas termina la
      lectura: en un iPhone con poca memoria libre, no soltarla es lo que hace
      que Safari cierre la pestana en la segunda o tercera foto. */
@@ -3687,11 +3953,14 @@ async function entraArchivo(file) {
 function diligenciar(d, via) {
   var n = 0;
   var incierto = (via === "ocr");
+  var puestos = {};                      /* D36 · lo que llenó el lector, para medirlo */
   function pon(id, v) {
     if (v != null && v !== "") {
       $(id).value = v;
       $(id).classList.remove("auto", "auto-ocr");
       $(id).classList.add(incierto ? "auto-ocr" : "auto");
+      var k = CAMPO_DE[id.slice(1)];
+      if (k) puestos[k] = String(v);
       n++;
     }
   }
@@ -3773,6 +4042,7 @@ function diligenciar(d, via) {
       toast("Falta el nombre del proveedor: escríbalo y la app lo recordará.", "warn");
     }, 1800);
   }
+  return puestos;
 }
 
 function recalcular() {
@@ -3844,6 +4114,17 @@ function guardarGasto(enviar) {
   }
   var g = M.crearGasto(f, archivos.slice());
   if (enviar) M.enviarGasto(g.ID);
+
+  /* D36 · aquí, y solo aquí, se sabe qué valor era el correcto: el que la
+     persona dejó en el formulario después de revisarlo. Se compara contra lo
+     que había leído el lector y así se separa «llenó el campo» de «acertó». */
+  try {
+    var finales = {};
+    Object.keys(CAMPO_DE).forEach(function (id) { finales[CAMPO_DE[id]] = $("#" + id).value; });
+    lecturasAbiertas.forEach(function (id) { M.cerrarLectura(id, finales, g.Title); });
+  } catch (e) {}
+  lecturasAbiertas = [];
+
   archivos = [];
   limpiar();
   toast(g.Title + (enviar ? " enviado a aprobación." : " guardado en borrador."), "ok");
@@ -3916,15 +4197,27 @@ async function recortarYReleer() {
   /* Solo se rellena lo que estaba vacío; el proveedor sí se reemplaza si el
      recorte trajo uno más confiable que el nombre del local. */
   var mapa = { fNumero: "numfac", fNit: "nitfac", fProveedor: "proveedor", fCufe: "cufe" };
-  var n = 0;
+  var n = 0, puestos = {};
   Object.keys(mapa).forEach(function (id) {
     var v = r.datos[mapa[id]];
     if (!v) return;
     var e = $("#" + id);
     var pisar = !e.value || (id === "fProveedor" && !r.datos.proveedorDudoso);
-    if (pisar) { e.value = v; e.classList.add("auto-ocr"); n++; }
+    if (pisar) { e.value = v; e.classList.add("auto-ocr"); puestos[CAMPO_DE[id]] = String(v); n++; }
   });
-  if (r.datos.fecfac && !$("#fFecha").value) { $("#fFecha").value = r.datos.fecfac; n++; }
+  if (r.datos.fecfac && !$("#fFecha").value) {
+    $("#fFecha").value = r.datos.fecfac; puestos.fecha = String(r.datos.fecfac); n++;
+  }
+
+  /* D36 · el recorte se mide aparte. Es la ruta que hay que vigilar: si resulta
+     que casi todas las lecturas necesitan recorte, el problema no es el motor
+     sino la foto, y la respuesta es la cámara, no un servicio en la nube. */
+  try {
+    lecturasAbiertas.push(M.registrarLectura({
+      origen: "recorte", via: "ocr · recorte",
+      seg: (window.MTAULTIMO && window.MTAULTIMO.ms) || 0, leidos: puestos
+    }));
+  } catch (e) {}
 
   if (n) toast("Se completaron " + n + " campos con el recorte.", "ok");
   else toast("El recorte no aportó campos nuevos. Vea el texto leído en Bitácora.", "warn");
@@ -3943,6 +4236,10 @@ function nuevoGasto() {
   window.MTAPDFBYTES = null;
   window.MTAULTIMO = null;
   window.MTAERROR = null;
+  /* Un gasto abandonado deja sus lecturas anotadas pero sin calificar: cuentan
+     para el llenado, no para el acierto. Inventar una calificación sin que
+     nadie haya confirmado los datos sería falsear la medida. */
+  lecturasAbiertas = [];
   try { if (window.MTAOCR && window.MTAOCR.soltar) window.MTAOCR.soltar(); } catch (e) {}
   ir("home");
   try { window.scrollTo({ top: 0, behavior: "smooth" }); }
@@ -4264,8 +4561,106 @@ function pintarDiag() {
   $("#txtDiag").value = t;
 }
 
+/* ---------- D36 · rendimiento del lector ----------
+   Dos números que no hay que confundir:
+   · «llenó» = de cuántas lecturas salió ese campo.
+   · «acertó» = de las veces que lo llenó, cuántas quedaron tal cual después de
+     que la persona revisó el gasto y lo guardó.
+   Solo el segundo mide calidad, y solo existe para gastos ya guardados. */
+function pctL(a, b) { return b ? Math.round(a * 100 / b) + "%" : "—"; }
+function unDec(n) { return (Math.round((Number(n) || 0) * 10) / 10).toString().replace(".", ","); }
+
+function tablaLector(titulo, filas, rotuloCol) {
+  if (!filas.length) return "";
+  var h = '<p class="tit" style="margin-top:11px">' + esc(titulo) + '</p>' +
+          '<table class="tabm"><thead><tr><th>' + esc(rotuloCol) +
+          "</th><th>lect.</th><th>campos</th><th>seg</th><th>acierto</th></tr></thead><tbody>";
+  filas.forEach(function (f) {
+    h += "<tr><td>" + esc(f.nom) + "</td><td>" + f.n + "</td><td>" +
+         unDec(f.n ? f.campos / f.n : 0) + "</td><td>" +
+         unDec(f.n ? f.seg / f.n : 0) + "</td><td>" +
+         ((f.ok + f.mal) ? pctL(f.ok, f.ok + f.mal) : "—") + "</td></tr>";
+  });
+  return h + "</tbody></table>";
+}
+
+function ordenar(mapa) {
+  return Object.keys(mapa).map(function (k) {
+    var v = mapa[k]; return { nom: k, n: v.n, campos: v.campos, seg: v.seg, ok: v.ok, mal: v.mal };
+  }).sort(function (a, b) { return b.n - a.n; });
+}
+
+function pintarLector() {
+  var R = M.resumenLector();
+  var c = $("#lecResumen");
+  if (!R.n) {
+    c.innerHTML = '<p class="vacio">Todavía no hay lecturas medidas. La cuenta empieza con la primera foto o el primer escaneo que haga la app.</p>';
+    return;
+  }
+  var h = '<div class="kpis">' +
+    '<div class="kpi"><span>Lecturas medidas</span><b>' + R.n + '</b><i>' +
+      R.cerradas + ' con gasto guardado</i></div>' +
+    '<div class="kpi"><span>Campos que llena</span><b>' + unDec(R.camposPorLectura) +
+      '</b><i>de ' + R.totalCampos + ' posibles</i></div>' +
+    '<div class="kpi"><span>Acierto</span><b>' +
+      (R.precision == null ? "—" : Math.round(R.precision * 100) + "%") + '</b><i>' +
+      R.correctos + ' bien · ' + R.corregidos + (R.corregidos === 1 ? ' corregido' : ' corregidos') + '</i></div>' +
+    '<div class="kpi"><span>Tiempo por lectura</span><b>' + unDec(R.segPorLectura) +
+      ' s</b><i>' + R.aMano + (R.aMano === 1 ? ' campo escrito' : ' campos escritos') + ' a mano</i></div>' +
+    "</div>";
+
+  h += tablaLector("Por cómo entró el soporte", ordenar(R.porOrigen), "origen");
+  h += tablaLector("Por ruta de lectura", ordenar(R.porVia), "vía");
+
+  h += '<p class="tit" style="margin-top:11px">Campo por campo</p>' +
+       '<table class="tabm"><thead><tr><th>campo</th><th>lo llenó</th><th>acertó</th><th>a mano</th></tr></thead><tbody>';
+  M.CAMPOS_LECTOR.forEach(function (cc) {
+    var p = R.porCampo[cc.k];
+    h += "<tr><td>" + esc(p.n) + "</td><td>" + pctL(p.leido, R.n) + "</td><td>" +
+         ((p.ok + p.mal) ? pctL(p.ok, p.ok + p.mal) : "—") + "</td><td>" + p.mano + "</td></tr>";
+  });
+  h += "</tbody></table>";
+  h += '<p class="pie" style="margin-top:9px">Estas cifras son de <b>este teléfono</b>: ' +
+       'la app guarda los datos en el navegador de cada quien. Para tener la medida de toda la ' +
+       'firma hay que pasar las listas a SharePoint.</p>';
+  c.innerHTML = h;
+}
+
+function textoLector() {
+  var R = M.resumenLector();
+  if (!R.n) return "Sin lecturas medidas todavía.";
+  var t = "MTA · rendimiento del lector\n";
+  t += "equipo: " + navigator.userAgent + "\n";
+  t += "usuario: " + M.usuario().Nombre + "\n";
+  t += "periodo: " + M.fechaCorta(R.desde) + " a " + M.fechaCorta(R.hasta) + "\n\n";
+  t += "lecturas: " + R.n + "  (con gasto guardado: " + R.cerradas + ")\n";
+  t += "campos por lectura: " + unDec(R.camposPorLectura) + " de " + R.totalCampos + "\n";
+  t += "acierto: " + (R.precision == null ? "sin dato" : Math.round(R.precision * 100) + "%") +
+       "  (" + R.correctos + " bien / " + R.corregidos + " corregidos)\n";
+  t += "campos escritos a mano: " + R.aMano + "\n";
+  t += "segundos por lectura: " + unDec(R.segPorLectura) + "\n";
+  function bloque(tit, mapa) {
+    t += "\n" + tit + "\n";
+    ordenar(mapa).forEach(function (f) {
+      t += "  " + f.nom + ": " + f.n + " lect · " + unDec(f.n ? f.campos / f.n : 0) +
+           " campos · " + unDec(f.n ? f.seg / f.n : 0) + " s · acierto " +
+           ((f.ok + f.mal) ? pctL(f.ok, f.ok + f.mal) : "sin dato") + "\n";
+    });
+  }
+  bloque("por origen:", R.porOrigen);
+  bloque("por vía:", R.porVia);
+  t += "\ncampo por campo (lo llenó / acertó / a mano):\n";
+  M.CAMPOS_LECTOR.forEach(function (cc) {
+    var p = R.porCampo[cc.k];
+    t += "  " + p.n + ": " + pctL(p.leido, R.n) + " / " +
+         ((p.ok + p.mal) ? pctL(p.ok, p.ok + p.mal) : "sin dato") + " / " + p.mano + "\n";
+  });
+  return t;
+}
+
 function pintarBitacora() {
   pintarDiag();
+  pintarLector();
   var c = $("#colaBita");
   var b = M.S.Bitacora.slice().reverse();
   c.innerHTML = b.length ? "" : '<p class="vacio">Sin eventos.</p>';
@@ -4323,11 +4718,56 @@ function arrancar() {
     try { if (window.MTAOCR && window.MTAOCR.precalentar) window.MTAOCR.precalentar(); } catch (e) {}
   }
   $("#btnFoto").addEventListener("pointerdown", alistarLector, { once: true });
+  $("#btnEscanear").addEventListener("pointerdown", alistarLector, { once: true });
   $("#btnArchivo").addEventListener("pointerdown", alistarLector, { once: true });
   $("#btnFoto").onclick = function () { alistarLector(); $("#inFoto").click(); };
   $("#btnArchivo").onclick = function () { alistarLector(); $("#inArchivo").click(); };
+
+  /* ---------- Escanear con el escaner del propio telefono ----------
+     Ningun navegador expone una API para abrir el escaner del sistema: no
+     existe. Lo que SI se puede es abrir el selector de archivos sin el
+     atributo `capture`, que es exactamente donde iOS y Android ofrecen su
+     escaner de documentos, y explicarle al usuario donde tocar.
+
+     Vale la pena hacerlo porque ese escaner endereza la hoja, corrige la
+     perspectiva y sube el contraste con el hardware y los modelos del propio
+     telefono. Es mejor que cualquier cosa que la app pueda hacer con un
+     lienzo: hoy se probo el enderezado propio y EMPEORO la lectura. */
+  function abrirSelectorEscaneo() { alistarLector(); $("#inEscaneo").click(); }
+
+  $("#btnEscanear").onclick = function () {
+    var visto = false;
+    try { visto = localStorage.getItem("mtag.guiaEscaner") === "1"; } catch (e) {}
+    if (visto) { abrirSelectorEscaneo(); return; }
+    $("#pasosIOS").hidden = !esIOS();
+    $("#pasosAndroid").hidden = esIOS();
+    $("#veloEscaner").hidden = false;
+  };
+  $("#cerrarEscaner").onclick = function () { $("#veloEscaner").hidden = true; };
+  $("#veloEscaner").onclick = function (e) { if (e.target === $("#veloEscaner")) $("#veloEscaner").hidden = true; };
+  $("#okEscaner").onclick = function () {
+    if ($("#noMostrarEscaner").checked) {
+      try { localStorage.setItem("mtag.guiaEscaner", "1"); } catch (e) {}
+    }
+    $("#veloEscaner").hidden = true;
+    /* El selector se abre en el mismo gesto del usuario: si se retrasa, iOS lo
+       bloquea por no venir de una interaccion directa. */
+    abrirSelectorEscaneo();
+  };
+  $("#inEscaneo").onchange = async function () {
+    var fs = Array.from(this.files); this.value = "";
+    origenActual = "escaneo";
+    for (var i = 0; i < fs.length; i++) {
+      var f = fs[i];
+      /* Un escaneo ya viene enderezado y con buen contraste: no se pasa por el
+         visor de recorte, que solo estorbaria. Si hace falta recortar, el aviso
+         de campos faltantes ofrece «Recortar y volver a leer». */
+      await entraArchivo(f);
+    }
+  };
   $("#inFoto").onchange = async function () {
     var fs = Array.from(this.files); this.value = "";
+    origenActual = "foto";
     for (var i = 0; i < fs.length; i++) {
       var f = fs[i];
       /* Antes de leer, el usuario acerca y recorta. Es lo que más sube el
@@ -4342,6 +4782,7 @@ function arrancar() {
   };
   $("#inArchivo").onchange = async function () {
     var fs = Array.from(this.files); this.value = "";
+    origenActual = "archivo";
     for (var i = 0; i < fs.length; i++) {
       var f = fs[i];
       /* Una imagen adjunta también pasa por el visor: da lo mismo si viene de
@@ -4381,6 +4822,31 @@ function arrancar() {
     t.select();
     try { document.execCommand("copy"); toast("Texto copiado."); }
     catch (e) { toast("Seleccione el texto y cópielo con Ctrl+C.", "warn"); }
+  };
+  /* D36 · el resumen se copia como texto para poder enviarlo: mientras los
+     datos vivan en cada teléfono, esa es la única forma de juntarlos. */
+  $("#copiarLector").onclick = function () {
+    var t = textoLector();
+    var ta = document.createElement("textarea");
+    ta.value = t;
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    if (ok) toast("Resumen copiado. Péguelo en un correo o en un chat.", "ok");
+    else if (navigator.clipboard) {
+      navigator.clipboard.writeText(t).then(
+        function () { toast("Resumen copiado.", "ok"); },
+        function () { toast("No se pudo copiar en este navegador.", "warn"); });
+    } else toast("No se pudo copiar en este navegador.", "warn");
+  };
+  $("#borrarLector").onclick = function () {
+    if (!confirm("Se borran las mediciones del lector de este teléfono. Los gastos NO se tocan. ¿Continuar?")) return;
+    M.borrarLecturas();
+    pintarLector();
+    toast("Mediciones borradas.");
   };
   $("#expTodo").onclick = function () { exportar("todo"); };
   $("#expMes").onclick  = function () { exportar("mes"); };
