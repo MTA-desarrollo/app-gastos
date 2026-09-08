@@ -342,6 +342,17 @@ nav.compacta .navacc .btn{flex:0 1 auto;min-width:0;padding:0 8px;font-size:11.5
                      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tabm tr:last-child td{border-bottom:none}
 .accm{display:flex;gap:8px;flex-wrap:wrap}
+/* Estado de la conexión y resultado del diagnóstico */
+.pilnube{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:20px;
+         background:var(--gris-bg);color:var(--gris);white-space:nowrap}
+.pilnube.ok{background:var(--ok-bg);color:var(--ok)}
+.pilnube.mal{background:var(--err-bg);color:var(--err)}
+.pasonube{display:flex;gap:8px;align-items:baseline;font-size:12px;
+          padding:5px 0;border-bottom:1px solid var(--line)}
+.pasonube b{flex:none;width:15px}
+.pasonube span{color:var(--slate);word-break:break-word}
+.colanube{margin-top:9px;background:var(--warn-bg);color:var(--warn);
+          border-radius:9px;padding:9px 11px;font-size:12px}
 .instalar{position:sticky;top:57px;z-index:29;background:var(--brass-soft);
           border-bottom:1px solid rgba(0,119,192,.28)}
 .ibar{display:flex;align-items:center;gap:11px;padding:10px 14px}
@@ -596,7 +607,7 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
       <label class="f"><span>Número del documento</span><input id="fNumero"></label>
     </div>
     <label class="f"><span>Nombre del proveedor / Razón social</span><input id="fProveedor"></label>
-    <label class="f"><span>CUFE</span><input id="fCufe" placeholder="Lo diligencia la app" class="num" style="font-size:11px"></label>
+    <label class="f"><span>CUFE</span><input id="fCufe" class="num" style="font-size:11px"></label>
     <label class="chk"><input type="checkbox" id="fSinSoporte"> Sin soporte formal</label>
   </div>
 
@@ -756,6 +767,27 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
     <textarea id="txtDiag" rows="12" readonly class="diag"></textarea>
     <button class="mini" id="copiarDiag">Copiar</button>
   </div>
+  <!-- Conexión con SharePoint. Los tres datos los pega el usuario: no son
+       secretos —salen en cualquier URL de inicio de sesión de Microsoft— pero
+       aun así no se escriben en el código, porque el index.html es público y
+       porque cada firma tendría los suyos. -->
+  <div class="card">
+    <div class="cabcard"><p class="tit">Conexión con SharePoint</p>
+      <span class="pilnube" id="estadoNube">sin conectar</span></div>
+    <p class="hint">Mientras no se conecte, la app guarda en este teléfono, igual que hoy.</p>
+    <label class="f"><span>Id. de aplicación (cliente)</span><input id="nClienteId" placeholder="00000000-0000-0000-0000-000000000000" class="num" style="font-size:11px"></label>
+    <label class="f"><span>Id. de inquilino</span><input id="nInquilino" placeholder="00000000-0000-0000-0000-000000000000" class="num" style="font-size:11px"></label>
+    <label class="f"><span>Dirección del sitio</span><input id="nSitio" placeholder="https://sudominio.sharepoint.com/sites/AppGastos" style="font-size:12px"></label>
+    <div class="accm">
+      <button class="mini" id="nGuardar">Guardar los datos</button>
+      <button class="mini" id="nEntrar">Entrar con mi correo</button>
+      <button class="mini" id="nProbar">Probar la conexión</button>
+      <button class="mini" id="nSalir">Cerrar sesión</button>
+    </div>
+    <div id="nResultado"></div>
+    <div class="colanube" id="nCola" hidden></div>
+  </div>
+
   <!-- D36 · medición del lector. Existe para decidir con números, y no con
        impresiones, si hace falta un lector de facturas de pago. -->
   <div class="card">
@@ -3695,6 +3727,490 @@ window.MTAEXCEL = { generar: generar };
 })();
 </script>
 <script>/* =========================================================================
+   MTA · APP DE GASTOS — nube
+   Identidad con el correo corporativo (MSAL) y escritura en SharePoint por
+   Microsoft Graph, con cola para trabajar sin señal.
+   8 de septiembre de 2026.
+
+   ─────────────────────────────────────────────────────────────────────────
+   POR QUÉ EXISTE ESTE MÓDULO
+
+   Hasta hoy la app guarda en el navegador de cada teléfono. Eso significa que
+   si un colaborador captura un gasto en su celular, el aprobador no lo puede
+   ver desde el suyo. Nunca. Esto es lo que lo arregla.
+
+   ─────────────────────────────────────────────────────────────────────────
+   TRES REGLAS QUE GOBIERNAN ESTE ARCHIVO
+
+   1. NINGÚN SECRETO VIVE AQUÍ. `index.html` es público en GitHub. Por eso la
+      aplicación se registra en Entra como CLIENTE PÚBLICO con PKCE, que no usa
+      secreto: la seguridad la da el flujo, no un dato escondido. El
+      identificador de aplicación y el del inquilino NO son secretos —salen en
+      cualquier URL de inicio de sesión—, pero aun así no se escriben en el
+      código: los escribe el usuario en la pantalla de Conexión y quedan en su
+      propio navegador.
+
+   2. NADIE ESCRIBE CONTRASEÑAS EN LA APP. El inicio de sesión lo hace la
+      ventana de Microsoft, no un formulario nuestro. La app nunca ve la clave.
+
+   3. LO QUE NO SE PUDO ENVIAR NO SE PIERDE. Un gasto capturado en un juzgado
+      sin cobertura se guarda igual y sube solo cuando vuelve la conexión. Sin
+      esto la app deja de servir justo donde más se usa.
+
+   ─────────────────────────────────────────────────────────────────────────
+   ⚠️ ESTADO AL 8 DE SEPTIEMBRE DE 2026 — LÉASE ANTES DE CONFIAR EN ESTO
+
+   Este módulo está ESCRITO Y PROBADO CONTRA UN SERVIDOR SIMULADO, no contra el
+   inquilino real de la firma, porque el sitio de SharePoint todavía no existe y
+   la aplicación todavía no está registrada en Entra.
+
+   Lo que SÍ está comprobado (ver `06_AUDITORIA/nube.js`): el mapeo de campos,
+   la resolución de las columnas de búsqueda, la subida de soportes, la cola,
+   los reintentos con espera creciente, el corte por falta de red y la
+   reanudación al volver.
+
+   Lo que NO está comprobado y hay que verificar el primer día: el diálogo real
+   de Microsoft, el consentimiento del inquilino, los permisos efectivos sobre
+   el sitio y los nombres internos reales de las columnas.
+
+   MIENTRAS NO SE CONECTE, ESTE MÓDULO NO HACE NADA: la app sigue guardando en
+   el teléfono exactamente como hoy. Encenderlo es una decisión explícita del
+   usuario en la pantalla de Conexión.
+   ========================================================================= */
+(function () {
+"use strict";
+
+/* Versión fija, por la misma razón que Tesseract.js y pdf.js: una librería que
+   se actualiza sola es un cambio en producción que nadie probó. */
+var MSAL_CDN = "https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js";
+var GRAFO = "https://graph.microsoft.com/v1.0";
+
+/* Permisos delegados. El usuario actúa como él mismo: no hay una cuenta de
+   servicio con poderes sobre todo el sitio.
+   ⚠️ Sites.ReadWrite.All suele exigir consentimiento del administrador. Es
+   exactamente el paso 4 de la verificación de Azure. Si el inquilino lo exige y
+   nadie lo aprueba, el primer usuario verá una pantalla de bloqueo de
+   Microsoft: no es un fallo de la app. */
+var PERMISOS = ["User.Read", "Sites.ReadWrite.All"];
+
+var K_CONF = "mtag.nube";      /* configuración que escribe el usuario */
+var K_COLA = "mtag.cola";      /* lo que falta por subir */
+
+var conf = null, msal = null, cliente = null, cuenta = null;
+var ids = null;                /* sitio, listas y biblioteca, ya resueltos */
+var drenando = false;
+
+/* ---------------------------------------------------------- configuración */
+function leerConf() {
+  if (conf) return conf;
+  try { conf = JSON.parse(localStorage.getItem(K_CONF) || "null"); } catch (e) { conf = null; }
+  return conf;
+}
+function guardarConf(c) {
+  conf = c;
+  try { localStorage.setItem(K_CONF, JSON.stringify(c)); } catch (e) {}
+}
+function borrarConf() {
+  conf = null; cliente = null; cuenta = null; ids = null;
+  try { localStorage.removeItem(K_CONF); } catch (e) {}
+}
+function configurada() {
+  var c = leerConf();
+  return !!(c && c.clienteId && c.inquilino && c.sitio);
+}
+function conectado() { return !!(cuenta && ids); }
+
+/* La URL del sitio llega como la copia el usuario del navegador:
+   https://mtalegal.sharepoint.com/sites/AppGastos
+   Graph la quiere partida en dos: el servidor y la ruta. */
+function partirSitio(url) {
+  var m = String(url || "").trim().match(/^https?:\/\/([^\/]+)(\/sites\/[^\/?#]+)/i);
+  if (!m) return null;
+  return { host: m[1], ruta: m[2] };
+}
+
+/* ------------------------------------------------------------------ MSAL */
+var cargandoMsal = null;
+function cargarMsal() {
+  if (window.msal) return Promise.resolve(window.msal);
+  if (cargandoMsal) return cargandoMsal;
+  cargandoMsal = new Promise(function (res, rej) {
+    var s = document.createElement("script");
+    s.src = MSAL_CDN;
+    s.onload = function () { window.msal ? res(window.msal) : rej(new Error("MSAL no se expuso")); };
+    s.onerror = function () { rej(new Error("sin conexión para cargar el inicio de sesión")); };
+    document.head.appendChild(s);
+  });
+  return cargandoMsal;
+}
+
+async function clienteMsal() {
+  if (cliente) return cliente;
+  var c = leerConf();
+  if (!c) throw new Error("Falta configurar la conexión.");
+  msal = await cargarMsal();
+  cliente = new msal.PublicClientApplication({
+    auth: {
+      clientId: c.clienteId,
+      authority: "https://login.microsoftonline.com/" + c.inquilino,
+      redirectUri: location.origin + location.pathname
+    },
+    cache: { cacheLocation: "localStorage", storeAuthStateInCookie: false }
+  });
+  if (cliente.initialize) await cliente.initialize();
+  return cliente;
+}
+
+/* Entrar. Se intenta primero en silencio: si la persona ya inició sesión en su
+   teléfono —lo normal—, no ve ninguna pantalla. */
+async function entrar(interactivo) {
+  var cl = await clienteMsal();
+  var cuentas = cl.getAllAccounts();
+  if (cuentas.length) { cuenta = cuentas[0]; return cuenta; }
+  if (!interactivo) return null;
+  var r = await cl.loginPopup({ scopes: PERMISOS, prompt: "select_account" });
+  cuenta = r.account;
+  return cuenta;
+}
+
+async function salir() {
+  try { if (cliente && cuenta) await cliente.logoutPopup({ account: cuenta }); } catch (e) {}
+  cuenta = null; ids = null;
+}
+
+async function token() {
+  var cl = await clienteMsal();
+  if (!cuenta) { cuenta = (cl.getAllAccounts() || [])[0]; }
+  if (!cuenta) throw new Error("No hay sesión iniciada.");
+  try {
+    var r = await cl.acquireTokenSilent({ scopes: PERMISOS, account: cuenta });
+    return r.accessToken;
+  } catch (e) {
+    /* El token venció y hay que volver a pedirlo con la ventana. Es normal cada
+       cierto tiempo y no es un error que haya que reportar como falla. */
+    var r2 = await cl.acquireTokenPopup({ scopes: PERMISOS, account: cuenta });
+    return r2.accessToken;
+  }
+}
+
+/* ----------------------------------------------------------------- Graph */
+async function graph(ruta, opciones) {
+  opciones = opciones || {};
+  var t = await token();
+  var cab = Object.assign({ Authorization: "Bearer " + t }, opciones.headers || {});
+  if (opciones.json !== undefined) {
+    cab["Content-Type"] = "application/json";
+    opciones.body = JSON.stringify(opciones.json);
+  }
+  var r = await fetch(ruta.indexOf("http") === 0 ? ruta : GRAFO + ruta, {
+    method: opciones.method || "GET", headers: cab, body: opciones.body
+  });
+  if (r.status === 429 || r.status === 503) {
+    /* Microsoft pide esperar. El número viene en la respuesta y hay que
+       respetarlo: insistir antes solo alarga el bloqueo. */
+    var espera = Number(r.headers.get("Retry-After") || 10);
+    var err = new Error("El servidor pidió esperar " + espera + " s.");
+    err.esperar = espera * 1000; err.reintentable = true;
+    throw err;
+  }
+  if (!r.ok) {
+    var texto = "";
+    try { texto = (await r.json()).error.message; } catch (e) { texto = r.statusText; }
+    var e2 = new Error("Graph " + r.status + ": " + texto);
+    e2.estado = r.status;
+    e2.reintentable = r.status >= 500;
+    throw e2;
+  }
+  if (r.status === 204) return null;
+  var ct = r.headers.get("Content-Type") || "";
+  return ct.indexOf("json") >= 0 ? r.json() : r.text();
+}
+
+/* Resuelve una sola vez el sitio, las listas y la biblioteca. Los nombres que
+   se piden son los INTERNOS, que es como se llamaron en el script de creación. */
+async function resolver() {
+  if (ids) return ids;
+  var c = leerConf(), p = partirSitio(c.sitio);
+  if (!p) throw new Error("La dirección del sitio no tiene la forma esperada.");
+  var sitio = await graph("/sites/" + p.host + ":" + p.ruta);
+  var listas = await graph("/sites/" + sitio.id + "/lists?$select=id,name,displayName");
+  var mapa = {};
+  (listas.value || []).forEach(function (l) { mapa[l.name] = l.id; mapa[l.displayName] = mapa[l.displayName] || l.id; });
+  var faltan = ["Gastos", "Reembolsos", "Conceptos", "Bitacora", "Lecturas"]
+                 .filter(function (n) { return !mapa[n]; });
+  if (faltan.length)
+    throw new Error("En el sitio faltan estas listas: " + faltan.join(", ") +
+                    ". ¿Se ejecutó el script de creación?");
+  var drives = await graph("/sites/" + sitio.id + "/drives?$select=id,name");
+  var soportes = (drives.value || []).filter(function (d) { return d.name === "Soportes"; })[0];
+  if (!soportes) throw new Error("No existe la biblioteca «Soportes» en el sitio.");
+  ids = { sitio: sitio.id, listas: mapa, soportes: soportes.id, nombreSitio: sitio.displayName || sitio.name };
+  return ids;
+}
+
+/* Los conceptos son una lista aparte y Gastos los referencia por BÚSQUEDA. Hay
+   que mandar ConceptoLookupId, no el texto. Se trae el catálogo una vez y se
+   guarda el mapa CON-002 -> id. */
+var mapaConceptos = null;
+async function conceptos() {
+  if (mapaConceptos) return mapaConceptos;
+  await resolver();
+  var r = await graph("/sites/" + ids.sitio + "/lists/" + ids.listas.Conceptos +
+                      "/items?expand=fields(select=Title)&$top=200");
+  mapaConceptos = {};
+  (r.value || []).forEach(function (it) {
+    if (it.fields && it.fields.Title) mapaConceptos[it.fields.Title] = Number(it.id);
+  });
+  return mapaConceptos;
+}
+
+/* --------------------------------------------------------------- la cola */
+function cola() {
+  try { return JSON.parse(localStorage.getItem(K_COLA) || "[]"); } catch (e) { return []; }
+}
+function guardarCola(c) {
+  try { localStorage.setItem(K_COLA, JSON.stringify(c)); } catch (e) {}
+}
+function encolar(tipo, datos) {
+  var c = cola();
+  c.push({
+    id: "op-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7),
+    tipo: tipo, datos: datos, intentos: 0, error: "", creado: new Date().toISOString()
+  });
+  guardarCola(c);
+  return c.length;
+}
+function pendientes() { return cola().length; }
+
+/* Espera creciente: 0 s, 30 s, 2 min, 8 min, 30 min. Reintentar cada segundo
+   contra un servidor que está caído solo gasta batería y datos. */
+var ESPERAS = [0, 30000, 120000, 480000, 1800000];
+function tocaReintentar(op) {
+  if (!op.ultimoIntento) return true;
+  var e = ESPERAS[Math.min(op.intentos, ESPERAS.length - 1)];
+  return (Date.now() - op.ultimoIntento) >= e;
+}
+
+/* Vacía la cola. Se llama al conectar, al volver la señal, y cada vez que se
+   guarda un gasto estando conectado.
+   Si algo falla se DETIENE: mantener el orden importa —un gasto tiene que
+   existir antes que su soporte— y machacar el servidor con las siguientes
+   operaciones cuando la primera ya falló no ayuda a nadie. */
+async function drenar(avisar) {
+  if (drenando) return { ok: 0, pendientes: pendientes() };
+  if (!navigator.onLine) return { ok: 0, pendientes: pendientes(), sinRed: true };
+  if (!conectado()) return { ok: 0, pendientes: pendientes(), sinSesion: true };
+  drenando = true;
+  var hechas = 0, c = cola();
+  try {
+    while (c.length) {
+      var op = c[0];
+      if (!tocaReintentar(op)) break;
+      try {
+        var res = await ejecutar(op);
+        c.shift();
+        /* ⚠️ HALLAZGO DE LA PRUEBA DEL 8 DE SEPTIEMBRE DE 2026.
+           El gasto ya recibía su referencia definitiva del servidor, pero sus
+           SOPORTES seguían apuntando a la del teléfono: el archivo terminaba en
+           `Soportes/GAS-000001/` mientras el gasto se llamaba `GAS-000007`. Es
+           el mismo choque de consecutivos que se había cerrado para el gasto,
+           vivo todavía en su carpeta: con doce teléfonos, doce carpetas
+           GAS-000001 con soportes de gastos distintos revueltos adentro.
+           Aquí se reescriben las operaciones que quedan en la cola con la
+           referencia real, antes de que se ejecuten. */
+        if (op.tipo === "gasto" && res && res.referencia && op.datos && op.datos.Title) {
+          reasignar(c, op.datos.Title, res.referencia);
+        }
+        guardarCola(c); hechas++;
+        if (avisar) avisar(hechas, c.length);
+      } catch (e) {
+        op.intentos++; op.ultimoIntento = Date.now(); op.error = String(e && e.message || e);
+        guardarCola(c);
+        break;
+      }
+    }
+  } finally { drenando = false; }
+  return { ok: hechas, pendientes: c.length, error: c.length ? c[0].error : "" };
+}
+
+/* Cambia la referencia local por la que asignó SharePoint en todo lo que aún no
+   se ha subido de ese mismo gasto. */
+function reasignar(c, local, real) {
+  c.forEach(function (o) {
+    if (o.tipo === "soporte" && o.datos && o.datos.referencia === local) o.datos.referencia = real;
+    if (o.tipo === "lectura" && o.datos && o.datos.Gasto === local) o.datos.Gasto = real;
+    if (o.tipo === "bitacora" && o.datos && o.datos.ReferenciaElemento === local)
+      o.datos.ReferenciaElemento = real;
+  });
+}
+
+async function ejecutar(op) {
+  if (op.tipo === "gasto")    return subirGasto(op.datos);
+  if (op.tipo === "soporte")  return subirSoporte(op.datos);
+  if (op.tipo === "bitacora") return subirBitacora(op.datos);
+  if (op.tipo === "lectura")  return subirLectura(op.datos);
+  throw new Error("Operación desconocida: " + op.tipo);
+}
+
+/* ------------------------------------------------------- subir un gasto */
+/* ⚠️ LA REFERENCIA NO PUEDE VENIR DEL TELÉFONO.
+   En el teléfono el consecutivo es local: el primer gasto de CADA aparato se
+   llama GAS-000001. Con doce personas habría doce GAS-000001 distintos. Por eso
+   el elemento se crea primero y la referencia se escribe DESPUÉS, con el número
+   que asignó SharePoint, que sí es único en toda la firma. Cuesta una llamada
+   más y evita un choque garantizado. */
+async function subirGasto(g) {
+  await resolver();
+  var mapa = await conceptos();
+  var campos = {
+    Title: "(pendiente)",
+    CorreoSolicitante: g.CorreoSolicitante || "",
+    FechaGasto: g.FechaGasto || null,
+    TipoSoporte: g.TipoSoporte || "",
+    NitProveedor: g.NitProveedor || "",
+    NombreProveedor: g.NombreProveedor || "",
+    NumeroDocumento: g.NumeroDocumento || "",
+    CUFE: g.CUFE || "",
+    CodigoConcepto: g.CodigoConcepto || "",
+    Descripcion: g.Descripcion || "",
+    ValorBase: Number(g.ValorBase) || 0,
+    IVA: Number(g.IVA) || 0,
+    OtrosNoDescontables: Number(g.OtrosNoDescontables) || 0,
+    ValorTotalSoporte: Number(g.ValorTotalSoporte) || 0,
+    CentroCosto: g.CentroCosto || "",
+    SinSoporteFormal: !!g.SinSoporteFormal,
+    FormatoSoporte: g.FormatoSoporte || "",
+    Estado: g.Estado || "Borrador"
+  };
+  if (mapa[g.CodigoConcepto]) campos.ConceptoLookupId = mapa[g.CodigoConcepto];
+
+  var creado = await graph("/sites/" + ids.sitio + "/lists/" + ids.listas.Gastos + "/items",
+                           { method: "POST", json: { fields: campos } });
+  var ref = "GAS-" + String(creado.id).padStart(6, "0");
+  await graph("/sites/" + ids.sitio + "/lists/" + ids.listas.Gastos + "/items/" + creado.id + "/fields",
+              { method: "PATCH", json: { Title: ref, CarpetaSoporte: ref,
+                                         EnlaceSoporte: "Soportes/" + ref + "/" } });
+  return { id: creado.id, referencia: ref };
+}
+
+/* --------------------------------------------------- subir un soporte */
+/* Premisa del usuario del 7 de septiembre: los soportes se conservan en PDF o
+   JPG como medio de prueba. La app ya convierte cualquier foto a JPEG antes de
+   guardarla; aquí solo se sube lo que ya está en el formato correcto y se deja
+   constancia de cuál es en la columna TipoArchivo. */
+async function subirSoporte(s) {
+  await resolver();
+  var ruta = "Soportes/" + s.referencia + "/" + s.nombre;
+  var blob = await desdeDataURL(s.contenido);
+  var destino = "/sites/" + ids.sitio + "/drives/" + ids.soportes + "/root:/" +
+                encodeURI(ruta) + ":/content";
+  var t = await token();
+  var r = await fetch(GRAFO + destino, {
+    method: "PUT",
+    headers: { Authorization: "Bearer " + t, "Content-Type": blob.type || "application/octet-stream" },
+    body: blob
+  });
+  if (!r.ok) {
+    var e = new Error("No se pudo subir «" + s.nombre + "» (" + r.status + ")");
+    e.reintentable = r.status >= 500 || r.status === 429;
+    throw e;
+  }
+  var archivo = await r.json();
+  /* Los metadatos se escriben aparte: sin ellos, un archivo suelto en una
+     carpeta no prueba de qué gasto es ni de quién. */
+  try {
+    await graph("/sites/" + ids.sitio + "/drives/" + ids.soportes + "/items/" + archivo.id + "/listItem/fields",
+      { method: "PATCH", json: {
+          ReferenciaGasto: s.referencia,
+          CorreoSolicitante: s.correo || "",
+          FechaGasto: s.fecha || null,
+          TipoArchivo: /\.pdf$/i.test(s.nombre) ? "PDF" : (/\.jpe?g$/i.test(s.nombre) ? "JPG" : "Otro"),
+          OrigenCaptura: s.origen || "archivo"
+        } });
+  } catch (e) { /* el archivo ya quedó guardado; los metadatos se pueden reponer */ }
+  return { id: archivo.id };
+}
+
+function desdeDataURL(url) {
+  return fetch(url).then(function (r) { return r.blob(); });
+}
+
+async function subirBitacora(b) {
+  await resolver();
+  return graph("/sites/" + ids.sitio + "/lists/" + ids.listas.Bitacora + "/items",
+    { method: "POST", json: { fields: {
+        Title: b.Title || "", FechaHoraEvento: b.FechaHoraEvento, MarcaTiempoUTC: b.MarcaTiempoUTC,
+        Evento: b.Evento, CorreoUsuario: b.CorreoUsuario, TipoElemento: b.TipoElemento,
+        IdElemento: Number(b.IdElemento) || 0, ReferenciaElemento: b.ReferenciaElemento || "",
+        Valor: Number(b.Valor) || 0, Origen: b.Origen || "Aplicación", Detalle: b.Detalle || ""
+      } } });
+}
+
+async function subirLectura(l) {
+  await resolver();
+  return graph("/sites/" + ids.sitio + "/lists/" + ids.listas.Lecturas + "/items",
+    { method: "POST", json: { fields: {
+        Title: l.Gasto || "", FechaHoraLectura: l.Fecha, CorreoUsuario: l.CorreoUsuario,
+        OrigenCaptura: l.Origen, RutaLectura: l.Via, Segundos: Number(l.Segundos) || 0,
+        CamposLeidos: Number(l.NumLeidos) || 0, CamposCorrectos: Number(l.Correctos) || 0,
+        CamposCorregidos: (l.Corregidos || []).join(", "), CamposAMano: (l.AMano || []).join(", "),
+        Equipo: (navigator.userAgent || "").slice(0, 200), ReferenciaGasto: l.Gasto || ""
+      } } });
+}
+
+/* ------------------------------------------------------------ diagnóstico */
+/* Comprueba la conexión de punta a punta SIN escribir nada. Es lo primero que
+   hay que correr el día que exista el sitio: dice exactamente en qué escalón
+   se rompe, en vez de un «no funciona». */
+async function diagnostico() {
+  var pasos = [];
+  function paso(q, ok, detalle) { pasos.push({ q: q, ok: ok, detalle: detalle || "" }); }
+  try {
+    if (!configurada()) { paso("Configuración", false, "Faltan datos en la pantalla de Conexión."); return pasos; }
+    paso("Configuración", true, leerConf().sitio);
+    await clienteMsal();
+    paso("Librería de inicio de sesión", true, "MSAL cargada");
+    var c = await entrar(false);
+    if (!c) { paso("Sesión", false, "No hay sesión iniciada. Toque «Entrar con mi correo»."); return pasos; }
+    paso("Sesión", true, c.username);
+    await token();
+    paso("Permisos", true, "Token obtenido");
+    var yo = await graph("/me?$select=displayName,mail,userPrincipalName");
+    paso("Usuario", true, (yo.displayName || "") + " · " + (yo.mail || yo.userPrincipalName || ""));
+    await resolver();
+    paso("Sitio y listas", true, ids.nombreSitio + " · " + Object.keys(ids.listas).length + " listas");
+    var m = await conceptos();
+    paso("Catálogo de conceptos", true, Object.keys(m).length + " conceptos");
+  } catch (e) {
+    paso("Falló aquí", false, String(e && e.message || e));
+  }
+  return pasos;
+}
+
+/* ---------------------------------------------------------------- arranque */
+function arrancar() {
+  /* Al volver la señal se intenta vaciar la cola sola. Es el caso del juzgado:
+     la persona capturó sin cobertura y no debería tener que acordarse de nada. */
+  window.addEventListener("online", function () {
+    drenar(null).then(function (r) {
+      if (r.ok && window.MTANUBEAVISO) window.MTANUBEAVISO(r);
+    });
+  });
+}
+
+window.MTANUBE = {
+  configurada: configurada, conectado: conectado,
+  leerConf: leerConf, guardarConf: guardarConf, borrarConf: borrarConf,
+  partirSitio: partirSitio,
+  entrar: entrar, salir: salir, cuenta: function () { return cuenta; },
+  resolver: resolver, conceptos: conceptos, graph: graph,
+  encolar: encolar, cola: cola, pendientes: pendientes, drenar: drenar,
+  diagnostico: diagnostico, arrancar: arrancar,
+  PERMISOS: PERMISOS
+};
+})();
+</script>
+<script>/* =========================================================================
    MTA · APP DE GASTOS — interfaz
    ========================================================================= */
 (function () {
@@ -4012,14 +4528,25 @@ function diligenciar(d, via) {
   var incierto = (via === "ocr");
   var puestos = {};                      /* D36 · lo que llenó el lector, para medirlo */
   function pon(id, v) {
-    if (v != null && v !== "") {
-      $(id).value = v;
-      $(id).classList.remove("auto", "auto-ocr");
-      $(id).classList.add(incierto ? "auto-ocr" : "auto");
-      var k = CAMPO_DE[id.slice(1)];
-      if (k) puestos[k] = String(v);
-      n++;
-    }
+    if (v == null || v === "") return;
+    var e = $(id), antes = e.value;
+    e.value = v;
+    /* ⚠️ HALLAZGO DEL 8 DE SEPTIEMBRE DE 2026, encontrado probando la cola de
+       la nube. Un `<input type="date">` RECHAZA EN SILENCIO todo lo que no sea
+       exactamente AAAA-MM-DD: con «14/08/2026», «20260814» o una fecha con
+       hora, el campo no se queja, se queda VACÍO. Y como la fecha del día ya
+       estaba puesta, el efecto era peor que no leer nada: la lectura BORRABA la
+       fecha buena, el gasto no se podía guardar —«Falta: fecha»— y el contador
+       D36 anotaba ese campo como llenado cuando en pantalla no había nada.
+       La comprobación es general y sirve para cualquier campo: si después de
+       asignar el valor el campo quedó vacío, el navegador lo rechazó; se
+       devuelve lo que había y no se cuenta como leído. */
+    if (e.value === "" && String(v) !== "") { e.value = antes; return; }
+    e.classList.remove("auto", "auto-ocr");
+    e.classList.add(incierto ? "auto-ocr" : "auto");
+    var k = CAMPO_DE[id.slice(1)];
+    if (k) puestos[k] = String(e.value);
+    n++;
   }
   pon("#fNumero", d.numfac);
   if (d.fecfac) { pon("#fFecha", d.fecfac); }
@@ -4199,6 +4726,7 @@ function guardarGasto(enviar) {
   }
   var g = M.crearGasto(f, archivos.slice());
   if (enviar) M.enviarGasto(g.ID);
+  encolarGasto(g);
 
   /* D36 · aquí, y solo aquí, se sabe qué valor era el correcto: el que la
      persona dejó en el formulario después de revisarlo. Se compara contra lo
@@ -4754,9 +5282,77 @@ function textoLector() {
   return t;
 }
 
+/* ---------- Conexión con SharePoint ----------
+   Esta pantalla existe para que el usuario no tenga que editar código. Los tres
+   datos que pega no son secretos —el identificador de una aplicación pública
+   sale en cualquier URL de inicio de sesión de Microsoft— pero cada firma tiene
+   los suyos y el index.html es público en GitHub, así que viven en el navegador
+   de cada quien, no en el archivo. */
+function pintarNube() {
+  var N = window.MTANUBE;
+  if (!N) return;
+  var c = N.leerConf() || {};
+  if ($("#nClienteId") && !$("#nClienteId").value) {
+    $("#nClienteId").value = c.clienteId || "";
+    $("#nInquilino").value = c.inquilino || "";
+    $("#nSitio").value = c.sitio || "";
+  }
+  var p = $("#estadoNube");
+  if (N.conectado()) { p.textContent = "conectado"; p.className = "pilnube ok"; }
+  else if (N.configurada()) { p.textContent = "configurado, sin entrar"; p.className = "pilnube"; }
+  else { p.textContent = "sin conectar"; p.className = "pilnube"; }
+
+  var n = N.pendientes(), caja = $("#nCola");
+  caja.hidden = !n;
+  if (n) {
+    caja.innerHTML = "<b>" + n + (n === 1 ? " cosa pendiente" : " cosas pendientes") +
+      " de subir.</b> Se suben solas cuando haya señal. " +
+      '<button class="mini" id="nSubir">Intentar ahora</button>';
+    var b = document.getElementById("nSubir");
+    if (b) b.onclick = subirPendientes;
+  }
+}
+
+function pintarPasosNube(pasos) {
+  $("#nResultado").innerHTML = pasos.map(function (x) {
+    return '<div class="pasonube"><b>' + (x.ok ? "✅" : "❌") + "</b><span><b>" +
+           esc(x.q) + "</b> · " + esc(x.detalle) + "</span></div>";
+  }).join("");
+}
+
+async function subirPendientes() {
+  var N = window.MTANUBE;
+  if (!N.conectado()) { toast("Primero entre con su correo.", "warn"); return; }
+  toast("Subiendo lo pendiente…");
+  var r = await N.drenar(null);
+  pintarNube();
+  if (r.ok && !r.pendientes) toast("Todo subido: " + r.ok + " elemento(s).", "ok");
+  else if (r.ok) toast("Subidos " + r.ok + ". Quedan " + r.pendientes + ".", "warn");
+  else if (r.sinRed) toast("Sin conexión. Se subirá solo cuando vuelva.", "warn");
+  else toast("No se pudo subir: " + (r.error || "sin detalle"), "err");
+}
+
+/* Todo lo que la app guarda se encola SIEMPRE, esté o no conectada. Así el día
+   que se conecte no se pierde lo anterior, y el gasto capturado sin señal en un
+   juzgado sube solo cuando haya cobertura. */
+function encolarGasto(g) {
+  var N = window.MTANUBE;
+  if (!N || !N.configurada()) return;
+  try {
+    N.encolar("gasto", g);
+    (g.Soportes || []).forEach(function (a) {
+      if (!a.url) return;   /* sin contenido no hay nada que subir */
+      N.encolar("soporte", { referencia: g.Title, nombre: a.nombre, contenido: a.url,
+                             correo: g.CorreoSolicitante, fecha: g.FechaGasto, origen: origenActual });
+    });
+    if (N.conectado()) N.drenar(null).then(function () { if (pantalla === "bitacora") pintarNube(); });
+  } catch (e) {}
+}
+
 function pintarBitacora() {
   pintarDiag();
   pintarLector();
+  pintarNube();
   var c = $("#colaBita");
   var b = M.S.Bitacora.slice().reverse();
   c.innerHTML = b.length ? "" : '<p class="vacio">Sin eventos.</p>';
@@ -4943,6 +5539,47 @@ function arrancar() {
     pintarLector();
     toast("Mediciones borradas.");
   };
+  /* ---------- Conexión con SharePoint ---------- */
+  var N = window.MTANUBE;
+  if (N) {
+    try { N.arrancar(); } catch (e) {}
+    window.MTANUBEAVISO = function (r) {
+      toast("Volvió la señal: se subieron " + r.ok + " elemento(s).", "ok");
+      if (pantalla === "bitacora") pintarNube();
+    };
+    $("#nGuardar").onclick = function () {
+      var sitio = $("#nSitio").value.trim();
+      if (!N.partirSitio(sitio))
+        return toast("La dirección del sitio debe verse así: https://sudominio.sharepoint.com/sites/AppGastos", "err");
+      var cid = $("#nClienteId").value.trim(), inq = $("#nInquilino").value.trim();
+      if (!cid || !inq) return toast("Faltan el identificador de aplicación y el de inquilino.", "err");
+      N.guardarConf({ clienteId: cid, inquilino: inq, sitio: sitio });
+      toast("Datos guardados en este teléfono. Ahora toque «Entrar con mi correo».", "ok");
+      pintarNube();
+    };
+    /* Este botón lo pulsa la PERSONA, y quien pide la clave es la ventana de
+       Microsoft. La app nunca ve una contraseña. */
+    $("#nEntrar").onclick = async function () {
+      if (!N.configurada()) return toast("Primero guarde los tres datos.", "warn");
+      try {
+        var cu = await N.entrar(true);
+        if (!cu) return toast("No se inició sesión.", "warn");
+        await N.resolver();
+        toast("Conectado como " + (cu.username || ""), "ok");
+      } catch (e) {
+        toast("No se pudo entrar: " + (e && e.message || e), "err");
+      }
+      pintarNube();
+    };
+    $("#nProbar").onclick = async function () {
+      $("#nResultado").innerHTML = '<p class="hint">Comprobando…</p>';
+      pintarPasosNube(await N.diagnostico());
+      pintarNube();
+    };
+    $("#nSalir").onclick = async function () {
+      await N.salir(); toast("Sesión cerrada."); pintarNube();
+    };
+  }
   $("#expTodo").onclick = function () { exportar("todo"); };
   $("#expMes").onclick  = function () { exportar("mes"); };
   $("#expApr").onclick  = function () { exportar("aprobados"); };
