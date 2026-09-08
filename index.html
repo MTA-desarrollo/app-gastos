@@ -114,6 +114,10 @@ select,input,textarea{padding:8px 10px}
 .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate)}
 .chk input{width:auto}
 .hint{font-size:11.5px;color:var(--faint);margin:-4px 0 9px}
+/* La aclaración de «Otros» va pegada bajo su propia columna, alineada a la
+   derecha como el campo. Así se lee como el pie de ESE campo y no como una nota
+   general de la tarjeta. */
+.pista-otros{text-align:right;margin:5px 0 9px}
 
 /* Mas bajos que antes -de 74 a 48 px- pero conservan el color de marca, el
    borde y el tamano del icono, que es lo que los mantiene como el punto de
@@ -541,7 +545,7 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
       </div>
       <div class="drop recomendado" id="btnEscanear">
         <svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2"/><path d="M4 12h16"/></svg>
-        <div><b>Escanear</b><span class="pista">lee mejor</span></div>
+        <div><b>Escanear</b></div>
       </div>
       <div class="drop" id="btnArchivo">
         <svg viewBox="0 0 24 24"><path d="M13 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V9z"/><path d="M13 3v6h6"/></svg>
@@ -565,12 +569,15 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
 
   <div class="card">
     <p class="tit">Valores</p>
-    <p class="hint">«Otros» reúne todo lo que no es base ni IVA: impuesto al consumo, propina, servicio.</p>
     <div class="tres">
       <label class="f"><span>Base</span><input id="fBase" inputmode="decimal" class="num moneda"></label>
       <label class="f"><span>IVA</span><input id="fIva" inputmode="decimal" class="num moneda"></label>
       <label class="f"><span>Otros</span><input id="fOtros" inputmode="decimal" class="num moneda"></label>
     </div>
+    <!-- La aclaración va DEBAJO de «Otros» y alineada con esa columna, que es el
+         campo al que se refiere. Antes iba arriba del todo, larga, explicando un
+         campo que el lector todavía no había visto. -->
+    <p class="hint pista-otros">Otros: consumo, propina o servicio</p>
     <label class="f"><span>Valor total del soporte</span><input id="fTotal" inputmode="decimal" class="num moneda"></label>
     <div class="totrow"><span>Suma de los componentes</span><b class="num" id="calc">$ 0</b></div>
     <div class="aviso" id="avisoDif" hidden></div>
@@ -578,15 +585,17 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
 
   <div class="card">
     <p class="tit">Datos del documento</p>
-    <div class="dos">
-      <label class="f"><span>Fecha del gasto</span><input type="date" id="fFecha"></label>
-      <label class="f"><span>Tipo de soporte</span><select id="fTipo"></select></label>
-    </div>
+    <!-- «Tipo de soporte» se quitó del formulario el 7 de septiembre de 2026 por
+         instrucción del usuario. El DATO sigue existiendo —lo exige la columna de
+         SharePoint, la plantilla de Excel y la marca de atención de «Proveedor no
+         obligado a facturar»—, pero ya no se le pregunta a nadie: la app lo deduce
+         al guardar. Las reglas están en `tipoSoporteDe()`, en ui.js. -->
+    <label class="f"><span>Fecha del gasto</span><input type="date" id="fFecha"></label>
     <div class="dos">
       <label class="f"><span>NIT o cédula</span><input id="fNit" inputmode="numeric"></label>
       <label class="f"><span>Número del documento</span><input id="fNumero"></label>
     </div>
-    <label class="f"><span>Nombre del proveedor / Razón social</span><input id="fProveedor" placeholder="Lo diligencia la app"></label>
+    <label class="f"><span>Nombre del proveedor / Razón social</span><input id="fProveedor"></label>
     <label class="f"><span>CUFE</span><input id="fCufe" placeholder="Lo diligencia la app" class="num" style="font-size:11px"></label>
     <label class="chk"><input type="checkbox" id="fSinSoporte"> Sin soporte formal</label>
   </div>
@@ -719,7 +728,7 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
     <p class="tit">Plantilla de control para contabilidad</p>
     <p class="hint" style="margin-bottom:11px">Archivo de Excel con cuatro hojas: control de gastos
       con las 29 columnas del esquema, resumen por concepto —la base para asignar las cuentas del
-      PUC—, resumen por centro de costo y las cabeceras de reembolso con su sello.</p>
+      PUC—, resumen por destino y las cabeceras de reembolso con su sello.</p>
     <div class="btns3">
       <button class="btn pri" id="expTodo">Exportar todo</button>
       <button class="btn sec" id="expMes">Solo este mes</button>
@@ -3106,6 +3115,22 @@ function crearReembolso(ids){
   if (gs.some(function(g){ return g.Estado !== "Aprobado"; }))
     return {ok:false, msg:"Solo se consolidan gastos en estado Aprobado."};
 
+  /* ⚠️ HALLAZGO DE LA AUDITORÍA A10 · 7 de septiembre de 2026.
+     Un gasto YA consolidado se podía volver a consolidar en un segundo
+     reembolso. La regla anterior solo miraba el estado, y el estado sigue
+     siendo «Aprobado» hasta la aprobación final: no cambia al agruparse. En la
+     prueba, dos reembolsos sumaron $10.030.584 cuando los gastos valían
+     $5.040.292. Eso es un doble pago.
+     En pantalla costaba llegar porque la lista se repinta al cerrar, pero
+     bastaba con una pantalla desactualizada. Y el día que dos personas trabajen
+     contra SharePoint al mismo tiempo, deja de ser difícil: dos consolidaciones
+     simultáneas producen exactamente este caso. Se cierra en la regla, que es
+     donde tiene que cerrarse, y no en la pantalla. */
+  var ya = gs.filter(function(g){ return g.Reembolso; });
+  if (ya.length)
+    return {ok:false, msg:"Estos gastos ya están en un reembolso: " +
+            ya.map(function(g){ return g.Title; }).join(", ") + ". Actualice la pantalla."};
+
   S.seqReembolso++;
   var fechas = gs.map(function(g){ return g.FechaGasto; }).sort();
   var marcas = [];
@@ -3590,7 +3615,7 @@ function hojaConcepto(gs) {
   return { nombre: "Por concepto", filas: filas, anchos: [12, 30, 14, 11, 14, 13, 13, 15], congelar: 4 };
 }
 
-/* ---------- hoja 3: resumen por centro de costo ---------- */
+/* ---------- hoja 3: resumen por destino ---------- */
 function hojaCentro(gs) {
   var m = {};
   gs.forEach(function (g) {
@@ -3824,7 +3849,8 @@ function pintarCaptura() {
     M.CONCEPTOS.filter(function (c) { return c.Estado === "Activo"; })
       .sort(function (a, b) { return a.Orden - b.Orden; })
       .map(function (c) { return '<option value="' + c.Title + '">' + esc(c.Title + " · " + c.Concepto) + "</option>"; }).join("");
-  $("#fTipo").innerHTML = M.TIPOS_SOPORTE.map(function (t) { return "<option>" + esc(t) + "</option>"; }).join("");
+  /* Ya no se pinta un selector de tipo de soporte: el campo se quitó del
+     formulario el 7 de septiembre de 2026. Ver tipoSoporteDe(). */
   $("#fCentro").innerHTML = '<option value="">Seleccione…</option>' +
     M.CENTROS.map(function (t) { return "<option>" + esc(t) + "</option>"; }).join("");
   $("#fFecha").value = M.hoy();
@@ -4016,7 +4042,6 @@ function diligenciar(d, via) {
   pon("#fTotal", nt != null ? formatoMoneda(nt) : d.valtolfac);
   pon("#fCufe", d.cufe);
   pon("#fProveedor", d.proveedor);
-  if (d.cufe) { $("#fTipo").value = "Factura electrónica"; }
   recalcular();
   var fuente = {xml:"del XML", texto:"del PDF", pdf:"del PDF",
                 qr:"del código QR", ocr:"del texto de la imagen"}[via] || "del soporte";
@@ -4110,10 +4135,38 @@ function ajustarIVA() {
   $("#reqDesc").hidden = !exigeDescripcion(c);
 }
 
+/* ---------------------------------------------------------------------------
+   TIPO DE SOPORTE · deducido, no preguntado
+   7 de septiembre de 2026. El usuario pidió quitar el campo del formulario.
+   Pero el DATO no se puede quitar: lo exige la columna de SharePoint, la
+   plantilla de Excel lo lleva en su columna 4, y la marca de atención
+   «Proveedor no obligado a facturar» del capítulo 7.3 se calcula con él.
+   Así que se deduce al guardar, con reglas escritas y en este orden:
+
+     1. Si el gasto viene marcado «Sin soporte formal», no hay documento de
+        venta: es un proveedor no obligado a facturar.
+     2. Si hay CUFE, es factura electrónica. El CUFE solo existe en ellas.
+     3. Si el texto que leyó la app nombra un documento equivalente, un tiquete
+        o un POS, es documento equivalente POS.
+     4. Si nada de lo anterior, se registra como recibo del proveedor, que es la
+        opción más conservadora: no afirma que exista factura.
+
+   ⚠️ Un efecto que hay que tener presente: antes «Proveedor no obligado a
+   facturar» se escogía a mano y ahora cuelga de la casilla «Sin soporte
+   formal». Son casos que en la práctica coincidían, pero no son idénticos en
+   teoría. Si algún día hace falta separarlos, se separan aquí. */
+function tipoSoporteDe(f) {
+  if (f.SinSoporteFormal) return "Proveedor no obligado a facturar";
+  if (f.CUFE) return "Factura electrónica";
+  var t = (window.MTAULTIMO && window.MTAULTIMO.texto) || "";
+  if (/documento\s+equivalente|tiquete|\bp\.?o\.?s\b|nota\s+de\s+venta/i.test(t))
+    return "Documento equivalente POS";
+  return "Recibo del proveedor";
+}
+
 function guardarGasto(enviar) {
   var f = {
     FechaGasto: $("#fFecha").value,
-    TipoSoporte: $("#fTipo").value,
     NitProveedor: $("#fNit").value.trim(),
     NombreProveedor: $("#fProveedor").value.trim(),
     NumeroDocumento: $("#fNumero").value.trim(),
@@ -4127,6 +4180,7 @@ function guardarGasto(enviar) {
     ValorTotalSoporte: aNumero($("#fTotal").value),
     SinSoporteFormal: $("#fSinSoporte").checked
   };
+  f.TipoSoporte = tipoSoporteDe(f);
   var c = M.concepto(f.CodigoConcepto);
   f.Concepto = c ? c.Concepto : "";
 
@@ -4292,7 +4346,6 @@ function limpiar() {
   $("#fConcepto").value = ""; $("#fCentro").value = "";
   $("#fSinSoporte").checked = false;
   $("#fFecha").value = M.hoy();
-  $("#fTipo").selectedIndex = 0;
   listaArchivos(); recalcular(); ajustarIVA();
 }
 
@@ -4366,7 +4419,11 @@ function pintarAprob() {
         "<dt>Concepto</dt><dd>" + esc(g.CodigoConcepto + " · " + (g.Concepto || "")) + "</dd>" +
         "<dt>Proveedor</dt><dd>" + esc(g.NombreProveedor || "—") + (g.NitProveedor ? " · NIT " + esc(g.NitProveedor) : "") + "</dd>" +
         "<dt>Documento</dt><dd>" + esc(g.NumeroDocumento || "—") + " · " + esc(g.TipoSoporte) + "</dd>" +
-        "<dt>Centro de costo</dt><dd>" + esc(g.CentroCosto) + "</dd>" +
+        /* «Destino», no «Centro de costo». El rótulo cambió el 2 de septiembre
+           de 2026 en el formulario y en el Excel, pero esta tarjeta se quedó
+           con el nombre viejo: el aprobador leía una etiqueta que ya no existe
+           en ninguna otra parte de la app. */
+        "<dt>Destino</dt><dd>" + esc(g.CentroCosto) + "</dd>" +
         "<dt>Desglose</dt><dd>Base " + M.pesos(g.ValorBase) + " · IVA " + M.pesos(g.IVA) +
           " · Otros " + M.pesos(g.OtrosNoDescontables) + "</dd>" +
         "<dt>Soporte</dt><dd>" + g.Soportes.length + " archivo(s) · " + esc(g.EnlaceSoporte) + "</dd>" +
@@ -4494,6 +4551,14 @@ function sello(r, gs) {
 /* Comprobante — equivale a la plantilla Excel convertida a PDF por F2 */
 function comprobante(r, gs) {
   var w = window.open("", "_blank");
+  /* En iPhone, y en cualquier navegador con el bloqueador de ventanas emergentes
+     puesto, `window.open` devuelve null y el comprobante no se abre. Sin este
+     control no pasaba NADA al tocar el botón: ni comprobante, ni aviso, ni
+     error. El usuario concluye que la app está rota, y tiene razón. */
+  if (!w) {
+    toast("El navegador bloqueó la ventana del comprobante. Permita las ventanas emergentes para este sitio y vuelva a intentarlo.", "err");
+    return;
+  }
   var filas = gs.map(function (g) {
     return "<tr><td>" + esc(g.Title) + "</td><td>" + M.fechaCorta(g.FechaGasto) +
       "</td><td>" + esc(g.NombreProveedor || "—") + "</td><td>" + esc(g.CodigoConcepto + " · " + (g.Concepto || "")) +
@@ -4834,7 +4899,6 @@ function arrancar() {
     if (p) { $("#fProveedor").value = p; $("#fProveedor").classList.add("auto"); }
   };
   $("#fConcepto").onchange = ajustarIVA;
-  $("#fTipo").onchange = ajustarIVA;
   $("#btnNuevo").onclick = nuevoGasto;
   $("#btnGuardar").onclick = function () { guardarGasto(false); };
   $("#btnEnviar").onclick = function () { guardarGasto(true); };
