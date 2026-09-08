@@ -3962,6 +3962,27 @@ function partirSitio(url) {
   return { host: m[1], ruta: m[2] };
 }
 
+/* ---------- la dirección de regreso ----------
+   ⚠️ 8 de septiembre de 2026. Esto causó el error AADSTS50011 en el Android de
+   Gabriel, y habría causado el mismo en el iPhone una vez instalada.
+
+   Microsoft solo acepta volver a una dirección EXACTA, registrada de antemano.
+   En Entra quedó registrada:      https://mta-desarrollo.github.io/app-gastos/
+   Pero el `start_url` del manifiesto es `./index.html`, así que la app instalada
+   —el APK en Android, el ícono en iPhone— arranca en:
+                                   .../app-gastos/index.html
+   y `location.pathname` traía ese `index.html` pegado. Desde el navegador, que
+   abre la carpeta, coincidía; desde la app instalada, no. Por eso fallaba solo
+   en el teléfono y solo después de instalarla: el peor sitio para descubrirlo.
+
+   Aquí se le quita el nombre del archivo y se garantiza la barra final, así que
+   la dirección de regreso es siempre la misma se abra como se abra. */
+function direccionDeRegreso() {
+  var p = String(location.pathname || "/").replace(/[^\/]*\.x?html?$/i, "");
+  if (p.charAt(p.length - 1) !== "/") p += "/";
+  return location.origin + p;
+}
+
 /* ------------------------------------------------------------------ MSAL */
 var cargandoMsal = null;
 function cargarMsal() {
@@ -3986,7 +4007,8 @@ async function clienteMsal() {
     auth: {
       clientId: c.clienteId,
       authority: "https://login.microsoftonline.com/" + c.inquilino,
-      redirectUri: location.origin + location.pathname
+      redirectUri: direccionDeRegreso(),
+      navigateToLoginRequestUrl: false
     },
     cache: { cacheLocation: "localStorage", storeAuthStateInCookie: false }
   });
