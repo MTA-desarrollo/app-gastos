@@ -353,6 +353,23 @@ nav.compacta .navacc .btn{flex:0 1 auto;min-width:0;padding:0 8px;font-size:11.5
 .pasonube span{color:var(--slate);word-break:break-word}
 .colanube{margin-top:9px;background:var(--warn-bg);color:var(--warn);
           border-radius:9px;padding:9px 11px;font-size:12px}
+/* La puerta tapa la app entera hasta que se sepa quién entró. */
+.puerta{position:fixed;inset:0;z-index:200;background:var(--ground);
+        display:flex;align-items:center;justify-content:center;padding:22px}
+.puerta-caja{max-width:380px;width:100%;background:var(--paper);border:1px solid var(--line);
+             border-radius:16px;padding:26px 22px;box-shadow:var(--sombra-alta);text-align:center}
+.puerta-logo{display:inline-block;font-weight:700;letter-spacing:.08em;font-size:15px;color:#fff;
+             background:linear-gradient(180deg,var(--deep) 0%,var(--deeper) 100%);
+             padding:7px 13px;border-radius:9px;margin-bottom:13px}
+.puerta-tit{font-size:19px;font-weight:600;margin:0 0 2px}
+.puerta-sub{font-size:12px;color:var(--faint);margin:0 0 18px}
+.puerta-txt{font-size:13.5px;color:var(--slate);margin:0 0 13px;line-height:1.5}
+.puerta-btn{width:100%;margin-top:4px}
+.puerta-pie{font-size:11.5px;color:var(--faint);margin:13px 0 0;line-height:1.45}
+.puerta-spin{width:26px;height:26px;margin:6px auto 13px;border-radius:50%;
+             border:3px solid var(--line);border-top-color:var(--brass);
+             animation:girar .9s linear infinite}
+@keyframes girar{to{transform:rotate(360deg)}}
 .instalar{position:sticky;top:57px;z-index:29;background:var(--brass-soft);
           border-bottom:1px solid rgba(0,119,192,.28)}
 .ibar{display:flex;align-items:center;gap:11px;padding:10px 14px}
@@ -455,6 +472,43 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
 </style>
 </head>
 <body>
+
+<!-- ============ PUERTA · inicio de sesión con el correo de la firma ============
+     Se muestra ANTES que nada cuando la app exige identidad. No es un formulario
+     de contraseña: es un botón que lleva a Microsoft. La app nunca ve una clave. -->
+<div class="puerta" id="puerta" hidden>
+  <div class="puerta-caja">
+    <div class="puerta-logo">MTA</div>
+    <h1 class="puerta-tit">App de Gastos</h1>
+    <p class="puerta-sub">Muñoz Tamayo &amp; Asociados Abogados</p>
+
+    <div id="puertaEntrar">
+      <p class="puerta-txt">Entre con su correo de la firma.</p>
+      <button class="btn pri puerta-btn" id="btnEntrarMS">Entrar con mi correo</button>
+      <p class="puerta-pie">La identificación la hace Microsoft. Esta aplicación
+        nunca ve su contraseña.</p>
+    </div>
+
+    <div id="puertaCargando" hidden>
+      <div class="puerta-spin"></div>
+      <p class="puerta-txt">Un momento…</p>
+    </div>
+
+    <div id="puertaNegada" hidden>
+      <p class="puerta-txt"><b>Su correo todavía no está autorizado.</b></p>
+      <p class="puerta-txt">Entró como <b id="puertaCorreo"></b>, y ese correo no
+        está en la lista de personas habilitadas para la App de Gastos.</p>
+      <p class="puerta-txt">Escríbale a <b>Gabriel Rodríguez</b> para que lo agregue.</p>
+      <button class="btn sec puerta-btn" id="btnOtraCuenta">Entrar con otra cuenta</button>
+    </div>
+
+    <div id="puertaError" hidden>
+      <p class="puerta-txt"><b>No se pudo iniciar sesión.</b></p>
+      <p class="puerta-txt" id="puertaDetalle"></p>
+      <button class="btn sec puerta-btn" id="btnReintentar">Volver a intentar</button>
+    </div>
+  </div>
+</div>
 
 <header>
  <div class="wrap hrow">
@@ -2829,13 +2883,37 @@ var PANTALLAS = {
   "Todos":                ["home", "mis", "aprob", "consol", "final", "conta", "bitacora"]
 };
 
+/* ---------- el directorio de personas ----------
+   8 de septiembre de 2026. Salen los usuarios de prueba y entran los correos
+   corporativos reales que dio Gabriel Rodríguez.
+
+   Los cinco colaboradores entran como Originador por decisión suya: capturan y
+   ven sus gastos, y nadie aprueba nada hasta que él lo defina. Cambiar un rol es
+   editar una línea de esta tabla; no toca ninguna otra parte de la app.
+
+   ⚠️ EL CORREO ES LA LLAVE. Cuando la app corre en Azure, quien inicia sesión
+   con su correo de Outlook de MTA queda emparejado con esta tabla por el correo,
+   en minúsculas. Si el correo no está aquí, la app lo dice y no lo deja entrar:
+   es preferible una puerta cerrada con explicación a una puerta abierta. */
 var USUARIOS = [
-  {Email:"gabriel@mta.com.co",  Nombre:"Gabriel",            Rol:"Todos"},
-  {Email:"colab@mta.com.co",    Nombre:"Colaborador prueba", Rol:"Originador"},
-  {Email:"aprob1@mta.com.co",   Nombre:"Aprobador operativo",Rol:"Aprobador operativo"},
-  {Email:"aprob2@mta.com.co",   Nombre:"Aprobador final",    Rol:"Aprobador final"},
-  {Email:"conta@mta.com.co",    Nombre:"Contabilidad",       Rol:"Contabilidad"}
+  {Email:"gabriel.rodriguez@mtalegal.co", Nombre:"Gabriel Rodríguez", Rol:"Todos"},
+  {Email:"sergio.rodriguez@mtalegal.co",  Nombre:"Sergio Rodríguez",  Rol:"Originador"},
+  {Email:"hugo.hurtado@mtalegal.co",      Nombre:"Hugo Hurtado",      Rol:"Originador"},
+  {Email:"diego.munoz@mtalegal.co",       Nombre:"Diego Muñoz",       Rol:"Originador"},
+  {Email:"joe.bonilla@mtalegal.co",       Nombre:"Joe Bonilla",       Rol:"Originador"},
+  {Email:"camilo.munoz@mtalegal.co",      Nombre:"Camilo Muñoz",      Rol:"Originador"}
 ];
+
+/* Busca a una persona por su correo, sin importar mayúsculas ni espacios: el
+   correo que devuelve Microsoft no siempre viene igual escrito que el que
+   alguien tecleó en una tabla. */
+function personaPorCorreo(correo) {
+  var c = String(correo || "").trim().toLowerCase();
+  for (var i = 0; i < USUARIOS.length; i++) {
+    if (USUARIOS[i].Email.toLowerCase() === c) return USUARIOS[i];
+  }
+  return null;
+}
 
 function pantallasDe(rol) { return PANTALLAS[rol] || PANTALLAS["Originador"]; }
 function puedeVer(p) { return pantallasDe(usuario().Rol).indexOf(p) >= 0; }
@@ -2853,7 +2931,7 @@ var S = {
   Gastos: [], Reembolsos: [], Bitacora: [], Proyectos: [],
   Lecturas: [],
   Parametros: Object.assign({}, PARAMETROS),
-  usuario: USUARIOS[0].Email,
+  usuario: USUARIOS[0].Email,   /* en Azure lo reemplaza la identidad real */
   seqGasto: 0, seqReembolso: 0, seqLectura: 0
 };
 
@@ -3264,6 +3342,7 @@ window.MTAG = {
   guardar: guardar, cargar: cargar, reiniciar: reiniciar,
   ref: ref, hoy: hoy, pesos: pesos, fechaCorta: fechaCorta,
   usuario: usuario, concepto: concepto, bitacora: bitacora,
+  personaPorCorreo: personaPorCorreo,
   CAMPOS_LECTOR: CAMPOS_LECTOR,
   registrarLectura: registrarLectura, cerrarLectura: cerrarLectura,
   resumenLector: resumenLector, borrarLecturas: borrarLecturas,
@@ -3793,6 +3872,39 @@ var GRAFO = "https://graph.microsoft.com/v1.0";
    Microsoft: no es un fallo de la app. */
 var PERMISOS = ["User.Read", "Sites.ReadWrite.All"];
 
+/* =========================================================================
+   CONFIGURACIÓN FIJA DE IDENTIDAD · 8 de septiembre de 2026
+   -------------------------------------------------------------------------
+   Estos dos datos vienen escritos en la app a propósito, y no en una pantalla
+   de configuración. La razón es práctica: si cada persona tuviera que pegarlos
+   en su teléfono, la app dejaría de ser «abrir el enlace y entrar». Con esto,
+   los cinco colaboradores no configuran absolutamente nada.
+
+   ⚠️ NO SON SECRETOS, y conviene entender por qué antes de alarmarse:
+   · El identificador de inquilino sale en la URL de cualquier inicio de sesión
+     de Microsoft de la firma. Es público por diseño.
+   · El identificador de aplicación también: identifica a la app, no autoriza a
+     nadie. La aplicación está registrada como CLIENTE PÚBLICO con PKCE, que no
+     usa secreto. Quien copiara estos dos números no podría entrar a nada: le
+     seguiría faltando ser una persona del directorio de MTA con su propia
+     cuenta.
+   La regla del proyecto sigue intacta: en `index.html`, que es público en
+   GitHub, no hay ninguna clave, ningún token y ningún secreto.
+
+   Mientras `clienteId` esté vacío, la app NO exige inicio de sesión y se
+   comporta exactamente como hasta hoy. Encenderlo es llenar esa línea. */
+var CONFIG_FIJA = {
+  /* Registrado en Entra ID el 8 de septiembre de 2026 como «MTA App de Gastos»,
+     cliente público de una sola página (SPA), sin secreto, solo para el
+     inquilino de Muñoz Tamayo & Asociados.
+     Dirección de redirección: https://mta-desarrollo.github.io/app-gastos/
+     ⚠️ El día que la app se mueva a Azure hay que AGREGAR —no reemplazar— la
+     dirección nueva en la misma pantalla de Authentication del registro. Si no,
+     el inicio de sesión falla con «AADSTS50011: redirect URI no coincide». */
+  clienteId: "292c0b0b-ec6c-4665-9c4b-4480febbb827",
+  inquilino: "63553b93-72cd-4819-b02f-21e8c26a9d46"   /* Muñoz Tamayo & Asociados · mtalegal.co */
+};
+
 var K_CONF = "mtag.nube";      /* configuración que escribe el usuario */
 var K_COLA = "mtag.cola";      /* lo que falta por subir */
 
@@ -3804,8 +3916,19 @@ var drenando = false;
 function leerConf() {
   if (conf) return conf;
   try { conf = JSON.parse(localStorage.getItem(K_CONF) || "null"); } catch (e) { conf = null; }
+  /* La configuración fija manda sobre lo que haya en el teléfono para la
+     identidad. Lo que el usuario escriba en la pantalla de Conexión sirve para
+     el sitio de SharePoint, que es otra cosa y todavía no existe. */
+  if (CONFIG_FIJA.clienteId) {
+    conf = Object.assign({}, conf || {}, {
+      clienteId: CONFIG_FIJA.clienteId, inquilino: CONFIG_FIJA.inquilino
+    });
+  }
   return conf;
 }
+
+/* ¿Esta app exige iniciar sesión? Solo si hay identificador de aplicación. */
+function sesionRequerida() { return !!CONFIG_FIJA.clienteId; }
 function guardarConf(c) {
   conf = c;
   try { localStorage.setItem(K_CONF, JSON.stringify(c)); } catch (e) {}
@@ -4158,6 +4281,134 @@ async function subirLectura(l) {
       } } });
 }
 
+/* =========================================================================
+   IDENTIDAD EN AZURE · 8 de septiembre de 2026
+   -------------------------------------------------------------------------
+   Cuando la app corre en Azure Static Web Apps, el inicio de sesión lo hace el
+   propio Azure ANTES de que la app se muestre. Azure deja entonces la identidad
+   de quien entró en una dirección interna del sitio, `/.auth/me`, y la app solo
+   tiene que leerla.
+
+   Por qué esto es lo que pidió el usuario, exactamente:
+   · «que se logueen únicamente con su correo de Outlook con dominio MTA» — el
+     inicio de sesión es contra Microsoft, con la cuenta que ya tienen.
+   · «sin tener que crear una contraseña» — no hay contraseña nueva que crear.
+     La que usan para el correo es la misma, y la escribe Microsoft, no la app.
+
+   ⚠️ Esto NO reemplaza a MSAL: son dos cosas distintas y conviven.
+      · `/.auth/me`  responde QUIÉN entró. Lo da Azure gratis, sin registrar
+        nada, en cuanto el sitio esté protegido.
+      · MSAL da el TOKEN para escribir en SharePoint. Hace falta el día que se
+        conecte SharePoint, y no antes.
+   Fuera de Azure —abriendo el archivo, o en GitHub Pages— `/.auth/me` no existe
+   y la función devuelve null sin romper nada. Es lo que permite que la app siga
+   funcionando igual mientras se hace la migración. */
+async function identidad() {
+  try {
+    var r = await fetch("/.auth/me", { credentials: "include" });
+    if (!r.ok) return null;
+    var d = await r.json();
+    var c = (d && d.clientPrincipal) || null;
+    if (!c) return null;
+    /* userDetails trae el correo con el proveedor de Entra ID. Se acompaña de
+       los «claims» por si el correo viniera vacío, que pasa en algunos
+       inquilinos configurados a la antigua. */
+    var correo = c.userDetails || "";
+    if (!correo && c.claims) {
+      for (var i = 0; i < c.claims.length; i++) {
+        var t = c.claims[i].typ || "";
+        if (/emailaddress$|\bemail\b|preferred_username|upn/i.test(t)) { correo = c.claims[i].val; break; }
+      }
+    }
+    return { correo: String(correo || "").trim().toLowerCase(), id: c.userId, proveedor: c.identityProvider };
+  } catch (e) { return null; }
+}
+
+/* =========================================================================
+   LA PUERTA · exigir el correo corporativo antes de mostrar la app
+   8 de septiembre de 2026.
+   -------------------------------------------------------------------------
+   Se usa REDIRECCIÓN y no ventana emergente. En un celular, una ventana
+   emergente la bloquea el navegador la mitad de las veces y la persona no
+   entiende por qué no pasa nada. Con redirección, la app se va a la pantalla de
+   Microsoft y vuelve sola. Es más lento de programar y mucho mejor de usar.
+
+   Tres respuestas posibles, y cada una tiene su pantalla:
+     ok             → la persona está en el directorio de la app
+     sin-sesion     → hay que entrar
+     no-autorizado  → entró con un correo que no está en la lista de MTA
+   ========================================================================= */
+var redireccionProcesada = null;
+
+/* Al volver de Microsoft, la respuesta llega en la dirección. Hay que
+   recogerla ANTES de preguntar por la cuenta, o la app cree que nadie entró. */
+async function procesarRedireccion() {
+  if (redireccionProcesada) return redireccionProcesada;
+  redireccionProcesada = (async function () {
+    try {
+      var cl = await clienteMsal();
+      var r = await cl.handleRedirectPromise();
+      if (r && r.account) cuenta = r.account;
+      return true;
+    } catch (e) { return false; }
+  })();
+  return redireccionProcesada;
+}
+
+async function entrarRedirect() {
+  var cl = await clienteMsal();
+  return cl.loginRedirect({ scopes: ["User.Read"], prompt: "select_account" });
+}
+
+/* El correo de la persona, tal como lo entrega Microsoft. */
+function correoDeCuenta(c) {
+  if (!c) return "";
+  var e = c.username || (c.idTokenClaims && (c.idTokenClaims.preferred_username || c.idTokenClaims.email)) || "";
+  return String(e).trim().toLowerCase();
+}
+
+/* ⚠️ LA APP TIENE QUE SEGUIR FUNCIONANDO SIN SEÑAL. Es la premisa de todo el
+   proyecto: el colaborador captura en un juzgado sin cobertura.
+   Pero la librería de inicio de sesión se descarga de internet. Si la puerta
+   dependiera solo de ella, un teléfono sin señal no podría ni abrir la app —y
+   se perdería justo la capacidad que más la justifica—.
+   Por eso se recuerda el último correo que entró bien. Si algún día no hay
+   internet para cargar la librería, se deja pasar con ese correo y se avisa.
+   No abre ningún hueco: los datos están en ese mismo teléfono, así que quien lo
+   tenga desbloqueado ya los tiene. Lo que se pierde es la comprobación fresca
+   contra Microsoft, no el control de quién es. */
+var K_ULTIMO = "mtag.ultimoCorreo";
+function recordarCorreo(c) { try { localStorage.setItem(K_ULTIMO, c); } catch (e) {} }
+function correoRecordado() { try { return localStorage.getItem(K_ULTIMO) || ""; } catch (e) { return ""; } }
+function olvidarCorreo() { try { localStorage.removeItem(K_ULTIMO); } catch (e) {} }
+
+async function exigirSesion() {
+  if (!sesionRequerida()) return { estado: "sin-puerta" };
+  try {
+    await procesarRedireccion();
+    var cl = await clienteMsal();
+    if (!cuenta) cuenta = (cl.getAllAccounts() || [])[0] || null;
+    if (!cuenta) return { estado: "sin-sesion" };
+    var correo = correoDeCuenta(cuenta);
+    if (!correo) return { estado: "sin-sesion" };
+    recordarCorreo(correo);
+    return { estado: "ok", correo: correo, nombre: cuenta.name || "" };
+  } catch (e) {
+    var guardado = correoRecordado();
+    if (guardado) return { estado: "ok", correo: guardado, recordado: true };
+    return { estado: "error", detalle: String(e && e.message || e) };
+  }
+}
+
+async function cerrarSesion() {
+  olvidarCorreo();
+  try {
+    var cl = await clienteMsal();
+    var c = cuenta || (cl.getAllAccounts() || [])[0];
+    if (c) return cl.logoutRedirect({ account: c });
+  } catch (e) {}
+}
+
 /* ------------------------------------------------------------ diagnóstico */
 /* Comprueba la conexión de punta a punta SIN escribir nada. Es lo primero que
    hay que correr el día que exista el sitio: dice exactamente en qué escalón
@@ -4203,6 +4454,11 @@ window.MTANUBE = {
   leerConf: leerConf, guardarConf: guardarConf, borrarConf: borrarConf,
   partirSitio: partirSitio,
   entrar: entrar, salir: salir, cuenta: function () { return cuenta; },
+  identidad: identidad,
+  sesionRequerida: sesionRequerida, exigirSesion: exigirSesion,
+  entrarRedirect: entrarRedirect, cerrarSesion: cerrarSesion,
+  correoDeCuenta: correoDeCuenta, olvidarCorreo: olvidarCorreo,
+  correoRecordado: correoRecordado,
   resolver: resolver, conceptos: conceptos, graph: graph,
   encolar: encolar, cola: cola, pendientes: pendientes, drenar: drenar,
   diagnostico: diagnostico, arrancar: arrancar,
@@ -4235,6 +4491,11 @@ var seleccion = [];
    no se pueden calificar: se califican al guardar, comparando lo que leyó el
    lector con lo que quedó en el formulario. */
 var origenActual = "archivo";
+/* Quién pasó la puerta. Se guarda porque `arrancar()` reconstruye el selector
+   de la cabecera DESPUÉS de la puerta, y sin esto volvía a quedar como una
+   lista para escoger: la sesión era real pero la pantalla decía lo contrario.
+   Lo encontró la prueba `06_AUDITORIA/puerta.js`. */
+var personaAutenticada = null;
 var lecturasAbiertas = [];
 
 /* De cada campo del formulario, la clave con la que se mide */
@@ -5369,13 +5630,143 @@ function pintarBitacora() {
 }
 
 /* ====================== ARRANQUE ====================== */
+/* ---------------------------------------------------------------------------
+   IDENTIDAD REAL · 8 de septiembre de 2026
+   En Azure, el correo de quien entró lo dice el propio servidor. Cuando eso
+   ocurre, el selector de usuario DESAPARECE: deja de ser una lista para
+   escoger y pasa a ser el nombre de quien está adentro. Es lo que convierte el
+   rol en algo real en vez de un sombrero intercambiable.
+   Si el correo no está en el directorio de `nucleo.js`, la app lo dice con
+   nombre propio y no lo deja entrar. Una puerta cerrada con explicación es
+   mejor que una puerta abierta.
+   Fuera de Azure esto no hace nada y el selector sigue como hoy, que es lo que
+   permite seguir probando mientras dura la migración. */
+async function aplicarIdentidadReal() {
+  var N = window.MTANUBE;
+  if (!N || !N.identidad) return false;
+  var id = null;
+  try { id = await N.identidad(); } catch (e) { return false; }
+  if (!id || !id.correo) return false;
+
+  var persona = M.personaPorCorreo(id.correo);
+  if (!persona) {
+    /* Entró alguien de la firma que nadie agregó al directorio. No se le
+       inventa un rol: se le dice qué pasa y a quién pedírselo. */
+    document.body.innerHTML =
+      '<div style="max-width:520px;margin:16vh auto;padding:0 22px;font:15px/1.6 ' +
+      "'Source Sans 3',system-ui,sans-serif;color:#16202C\">" +
+      '<h1 style="font-size:19px;margin:0 0 10px">Su correo todavía no está autorizado</h1>' +
+      "<p>Entró como <b>" + esc(id.correo) + "</b>, pero ese correo no está en la lista de " +
+      "personas habilitadas para la App de Gastos.</p>" +
+      "<p>Escríbale a <b>Gabriel Rodríguez</b> para que lo agregue. Toma un minuto.</p>" +
+      '<p style="color:#4E5865;font-size:13px">Si cree que se equivocó de cuenta, ' +
+      'cierre la sesión en <a href="/.auth/logout">este enlace</a> y vuelva a entrar.</p></div>';
+    return true;
+  }
+
+  M.S.usuario = persona.Email;
+  M.guardar();
+  fijarUsuarioEnCabecera(persona);
+  return true;
+}
+
+/* ---------------------------------------------------------------------------
+   LA PUERTA · 8 de septiembre de 2026
+   Cuando la app exige identidad, esta función corre ANTES que todo lo demás y
+   no deja pintar nada hasta saber quién entró. Devuelve true si se puede seguir.
+
+   Tres pantallas, tres situaciones. Ninguna de ellas es un formulario de
+   contraseña: el botón lleva a Microsoft y Microsoft se encarga.
+
+   ⚠️ Si el correo con el que entró no está en el directorio de `nucleo.js`, NO
+   se le inventa un rol ni se le deja pasar «por si acaso». Se le dice qué pasa y
+   a quién pedírselo. Una puerta cerrada con explicación es mejor que una puerta
+   abierta. */
+async function pasarLaPuerta() {
+  var N = window.MTANUBE;
+  if (!N || !N.sesionRequerida || !N.sesionRequerida()) return true;
+
+  var velo = $("#puerta");
+  velo.hidden = false;
+  function ver(cual) {
+    ["puertaEntrar", "puertaCargando", "puertaNegada", "puertaError"]
+      .forEach(function (id) { $("#" + id).hidden = (id !== cual); });
+  }
+  ver("puertaCargando");
+
+  $("#btnEntrarMS").onclick = function () {
+    ver("puertaCargando");
+    N.entrarRedirect().catch(function (e) {
+      $("#puertaDetalle").textContent = String(e && e.message || e);
+      ver("puertaError");
+    });
+  };
+  $("#btnOtraCuenta").onclick = function () { N.cerrarSesion(); };
+  $("#btnReintentar").onclick = function () { ver("puertaEntrar"); };
+
+  var r;
+  try { r = await N.exigirSesion(); }
+  catch (e) { r = { estado: "error", detalle: String(e && e.message || e) }; }
+
+  if (r.estado === "sin-sesion") { ver("puertaEntrar"); return false; }
+  if (r.estado === "error") {
+    $("#puertaDetalle").textContent = r.detalle ||
+      "Revise su conexión y vuelva a intentarlo.";
+    ver("puertaError"); return false;
+  }
+
+  var persona = M.personaPorCorreo(r.correo);
+  if (!persona) {
+    $("#puertaCorreo").textContent = r.correo;
+    ver("puertaNegada");
+    return false;
+  }
+
+  /* ⚠️ AQUÍ NO SE ESCRIBE NADA EN EL ALMACENAMIENTO, y la razón costó una
+     prueba en rojo: la puerta corre ANTES de `arrancar()`, y `arrancar()` es
+     quien llama a `M.cargar()`. Si la puerta guardaba el estado, guardaba el
+     estado VACÍO —todavía sin cargar— y machacaba los gastos, la bitácora y las
+     mediciones que había en el teléfono. Es decir: entrar borraba los datos.
+     Lo encontró `06_AUDITORIA/d36.js` con «las mediciones no sobrevivieron a la
+     recarga».
+     Ahora la puerta solo RECUERDA quién entró, y es `arrancar()` quien aplica la
+     identidad después de haber cargado. */
+  if (r.recordado) {
+    setTimeout(function () {
+      toast("Sin conexión: se abrió con su sesión guardada.", "warn");
+    }, 1200);
+  }
+  personaAutenticada = persona;
+  velo.hidden = true;
+  return true;
+}
+
+/* Con identidad real, el selector de arriba deja de ser una lista para escoger
+   y pasa a ser el nombre de quien está adentro. */
+function fijarUsuarioEnCabecera(persona) {
+  var sel = $("#usuario");
+  if (!sel || !persona) return;
+  sel.innerHTML = '<option value="' + persona.Email + '">' +
+                  esc(persona.Nombre + " · " + persona.Rol) + "</option>";
+  sel.value = persona.Email;
+  sel.disabled = true;
+  sel.style.opacity = "1";
+  sel.title = "Sesión iniciada con " + persona.Email;
+  sel.onchange = null;
+}
+
 function arrancar() {
   M.cargar();
+  /* La identidad se aplica DESPUÉS de cargar, nunca antes. Ver el aviso en
+     `pasarLaPuerta()`. */
+  if (personaAutenticada) { M.S.usuario = personaAutenticada.Email; M.guardar(); }
   var u = $("#usuario");
   u.innerHTML = M.USUARIOS.map(function (x) {
     return '<option value="' + x.Email + '">' + esc(x.Nombre + " · " + x.Rol) + "</option>";
   }).join("");
   u.value = M.S.usuario;
+  /* Si se entró por la puerta, el selector no es un selector. */
+  if (personaAutenticada) fijarUsuarioEnCabecera(personaAutenticada);
   u.onchange = function () {
     M.S.usuario = this.value; M.guardar();
     aplicarRol();
@@ -5591,6 +5982,12 @@ function arrancar() {
   ir(primeraPantalla());
   window.addEventListener("resize", ajustarBarra);
   window.addEventListener("orientationchange", function () { setTimeout(ajustarBarra, 250); });
+  /* La identidad se pide al final y sin bloquear: la app ya está pintada, así
+     que si la respuesta tarda o no llega, nadie se queda mirando una pantalla
+     en blanco. Cuando llega, se aplica y se vuelve a pintar el rol. */
+  aplicarIdentidadReal().then(function (hubo) {
+    if (hubo) { aplicarRol(); ir(M.puedeVer(pantalla) ? pantalla : M.pantallasDe(M.usuario().Rol)[0]); }
+  }).catch(function () {});
   try { registrarSW(); } catch (e) {}
   try { prepararInstalacion(); } catch (e) {}
 }
@@ -5673,7 +6070,12 @@ function prepararInstalacion() {
   window.addEventListener("appinstalled", function () { barra.hidden = true; });
 }
 
-document.addEventListener("DOMContentLoaded", arrancar);
+/* La puerta va PRIMERO. Si no se pasa, la app no se pinta: no tiene sentido
+   dibujar pantallas de un usuario que todavía no se sabe quién es. */
+document.addEventListener("DOMContentLoaded", function () {
+  pasarLaPuerta().then(function (pasa) { if (pasa) arrancar(); })
+                 .catch(function () { arrancar(); });
+});
 })();
 </script>
 </body>
