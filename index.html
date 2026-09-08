@@ -545,8 +545,10 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
 
     <p class="ojo" id="ojoSafari" hidden>
       <b>Primero:</b> esta página debe estar abierta en <b>Safari</b>.
-      Si la abrió desde WhatsApp o Teams, toque el menú de esa app y elija
-      <b>Abrir en Safari</b>.
+      Teams y WhatsApp abren los enlaces en una ventana propia, y desde ahí
+      no se puede instalar. En esa ventana toque <b>···</b> y elija
+      <b>Abrir en Safari</b>. Si no ve esa opción, copie la dirección y
+      péguela en Safari.
     </p>
 
     <p class="aclara">Los tres pasos se hacen en la <b>barra de Safari</b>, no aquí.
@@ -560,20 +562,24 @@ body:has(.velo:not([hidden])){overflow:hidden;position:fixed;width:100%}
           <span class="dos-vias">
             <span class="via">
               <span class="cuadro"><svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L8.5 6.5M12 3l3.5 3.5"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg></span>
-              <b>Si ve este botón</b>, tóquelo. Está en la barra de abajo.
+              <b>Si ve este botón</b>, tóquelo. Está en la barra gris de Safari,
+              al pie de la pantalla.
             </span>
             <span class="via">
               <span class="cuadro"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span>
-              <b>Si no lo ve</b>, toque los <b>tres puntos</b> que están junto a la
-              barra de direcciones, y luego <b>Compartir</b>.
+              <b>Si no lo ve</b>, toque los <b>tres puntos</b> que están al lado de
+              la casilla donde dice <b>mta-desarrollo.github.io</b>, y luego
+              <b>Compartir</b>.
             </span>
           </span>
         </span>
       </li>
       <li>
         <span class="pn">2</span>
-        <span class="pt">Deslice hacia abajo y toque <b>Agregar a pantalla de inicio</b>
-          <i>Está bastante abajo en la lista. Hay que buscarlo.</i>
+        <span class="pt">Busque <b>Agregar a pantalla de inicio</b> en la lista
+          <i>Se abre una lista desde el pie de la pantalla. Arrastre el dedo hacia
+          arriba <b>sobre esa lista</b> para recorrerla: la opción está bastante
+          abajo, después de «Copiar» y «Agregar a favoritos».</i>
         </span>
       </li>
       <li>
@@ -2901,7 +2907,11 @@ var USUARIOS = [
   {Email:"hugo.hurtado@mtalegal.co",      Nombre:"Hugo Hurtado",      Rol:"Originador"},
   {Email:"diego.munoz@mtalegal.co",       Nombre:"Diego Muñoz",       Rol:"Originador"},
   {Email:"joe.bonilla@mtalegal.co",       Nombre:"Joe Bonilla",       Rol:"Originador"},
-  {Email:"camilo.munoz@mtalegal.co",      Nombre:"Camilo Muñoz",      Rol:"Originador"}
+  {Email:"camilo.munoz@mtalegal.co",      Nombre:"Camilo Muñoz",      Rol:"Originador"},
+  /* 8 de septiembre de 2026 · agregado por pedido de Gabriel Rodríguez.
+     Entra como Originador, que es el rol con el que entraron los otros cinco.
+     Si necesita aprobar o pagar, se le cambia el Rol en esta misma línea. */
+  {Email:"juanfelipe.giraldo@mtalegal.co", Nombre:"Juan Felipe Giraldo", Rol:"Originador"}
 ];
 
 /* Busca a una persona por su correo, sin importar mayúsculas ni espacios: el
@@ -3991,7 +4001,8 @@ async function entrar(interactivo) {
   var cuentas = cl.getAllAccounts();
   if (cuentas.length) { cuenta = cuentas[0]; return cuenta; }
   if (!interactivo) return null;
-  var r = await cl.loginPopup({ scopes: PERMISOS, prompt: "select_account" });
+  /* Sin `prompt`: se aprovecha la sesión que ya tenga el navegador. */
+  var r = await cl.loginPopup({ scopes: PERMISOS });
   cuenta = r.account;
   return cuenta;
 }
@@ -4355,9 +4366,18 @@ async function procesarRedireccion() {
   return redireccionProcesada;
 }
 
+/* ⚠️ AQUÍ NO VA `prompt`. 8 de septiembre de 2026.
+   Con `prompt:"select_account"` Microsoft está OBLIGADO a mostrar la pantalla de
+   escoger cuenta y a volver a identificar a la persona, aunque ese teléfono ya
+   tenga la sesión de Outlook o de Teams abierta. Eso es exactamente lo que hizo
+   que en el Samsung de Gabriel apareciera «Escribir contraseña».
+   Sin `prompt`, Microsoft reutiliza la sesión que ya exista en el navegador y en
+   el caso normal la persona no ve ninguna pantalla: entra directo.
+   Si algún día hace falta cambiar de cuenta, se usa `salir()` y se vuelve a
+   entrar, no se fuerza el selector en cada arranque. */
 async function entrarRedirect() {
   var cl = await clienteMsal();
-  return cl.loginRedirect({ scopes: ["User.Read"], prompt: "select_account" });
+  return cl.loginRedirect({ scopes: ["User.Read"] });
 }
 
 /* El correo de la persona, tal como lo entrega Microsoft. */
